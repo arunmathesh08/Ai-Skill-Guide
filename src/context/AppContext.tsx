@@ -33,13 +33,24 @@ export interface ToastNotification {
 
 export interface AssessmentResultData {
   assessment: Assessment;
+  courseCategoryId?: string;
+  courseCategoryTitle?: string;
   totalQuestions: number;
   correctAnswersCount: number;
+  incorrectAnswersCount: number;
   calculatedScore: number;
   previousScore: number;
+  passingScore: number;
   timeSpentSeconds: number;
   skillName: string;
   passed: boolean;
+  skillLevel: string;
+  skillBreakdown: {
+    skill: string;
+    total: number;
+    correct: number;
+    percentage: number;
+  }[];
   questionResults: {
     question: string;
     selectedOption: string;
@@ -407,8 +418,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const existingSkill = studentProfile.skills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase()));
     const previousScore = existingSkill ? existingSkill.score : 50;
 
-    // Update student skills in profile
-    const updatedSkills = studentProfile.skills.map(s => {
+    // Update student skills in profile & deduplicate by skill name
+    const rawSkills = studentProfile.skills.map(s => {
       if (s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase())) {
         return {
           ...s,
@@ -419,6 +430,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       return s;
     });
+
+    const uniqueSkillsMap = new Map<string, typeof studentProfile.skills[0]>();
+    rawSkills.forEach(s => {
+      const key = s.name.trim().toLowerCase();
+      const existing = uniqueSkillsMap.get(key);
+      if (!existing || s.score > existing.score) {
+        uniqueSkillsMap.set(key, s);
+      }
+    });
+    const updatedSkills = Array.from(uniqueSkillsMap.values());
 
     // Recompute overall readiness delta
     const oldReadiness = studentProfile.careerReadiness;
@@ -431,29 +452,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       skills: updatedSkills
     };
 
-    setStudentProfile(updatedProfile);
+    // Calculate per-skill breakdown from questions
+    const skillCounts: Record<string, { total: number; correct: number }> = {};
+    assessment.questions.forEach((q, idx) => {
+      const isCorr = answers[q.id] === q.correctOptionIndex;
+      const sName = q.skill || 'General Skill';
+      if (!skillCounts[sName]) {
+        skillCounts[sName] = { total: 0, correct: 0 };
+      }
+      skillCounts[sName].total += 1;
+      if (isCorr) skillCounts[sName].correct += 1;
+    });
 
-    // Sync to Supabase
+    const skillBreakdown = Object.keys(skillCounts).map(sName => {
+      const { total, correct } = skillCounts[sName];
+      return {
+        skill: sName,
+        total,
+        correct,
+        percentage: Math.round((correct / total) * 100)
+      };
+    });
+
+    const passingScore = assessment.passingScore || 60;
+    const isPassed = calculatedScore >= passingScore;
+    const incorrectAnswersCount = assessment.questions.length - correctCount;
+    const skillLevel = calculatedScore >= 80 ? 'Advanced' : calculatedScore >= 60 ? 'Intermediate' : 'Developing';
+
+    // Persist to Supabase
     SupabaseService.saveProfile(updatedProfile);
     SupabaseService.recordAssessmentResult(
       assessmentId,
       studentProfile.user.id,
       skillName,
       calculatedScore,
-      calculatedScore >= 60,
+      isPassed,
       timeSpentSeconds,
       questionResults
     );
 
     const resultData: AssessmentResultData = {
       assessment,
+      courseCategoryId: assessment.courseCategoryId,
+      courseCategoryTitle: assessment.title,
       totalQuestions: assessment.questions.length,
       correctAnswersCount: correctCount,
+      incorrectAnswersCount,
       calculatedScore,
       previousScore,
+      passingScore,
       timeSpentSeconds,
       skillName,
-      passed: calculatedScore >= 60,
+      passed: isPassed,
+      skillLevel,
+      skillBreakdown,
       questionResults
     };
 
@@ -462,15 +514,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Add notification
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
-      title: `Assessment Completed: ${skillName}`,
-      message: `You scored ${calculatedScore}% in ${skillName}. Your skill profile and readiness scores have been recalibrated and synced to Supabase!`,
+      title: `Assessment Completed: ${assessment.title}`,
+      message: `You scored ${calculatedScore}% in ${assessment.title}. Your skill profile and readiness scores have been recalibrated!`,
       time: 'Just now',
       read: false,
       type: 'assessment'
     };
     setNotifications(prev => [newNotif, ...prev]);
 
-    showToast('success', `Completed ${skillName} assessment with score ${calculatedScore}%!`, 'Skill Verified & Cloud Synced');
+    showToast('success', `Completed ${assessment.title} with score ${calculatedScore}%!`, 'Skill Verified & Cloud Synced');
     navigateTo('skill-results');
   };
 

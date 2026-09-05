@@ -103,9 +103,9 @@ export const LearningPage: React.FC = () => {
                 className={`h-24 -mx-4 -mt-4 sm:-mx-6 sm:-mt-6 p-4 bg-gradient-to-r ${course.thumbnailGradient} text-white flex flex-col justify-between mb-4 shadow-inner`}
               >
                 <div className="flex justify-between items-start">
-                  <Badge variant="neutral" size="xs" className="bg-black/30 text-white border-0 font-bold">
+                  <span className="bg-[#172554] text-white border border-[#3B82F6] font-semibold text-xs px-3 py-1 rounded-full shadow-md shadow-slate-900/30 tracking-wide">
                     {course.level}
-                  </Badge>
+                  </span>
                   <span className="text-xs font-bold text-amber-300 flex items-center gap-1 bg-black/30 px-2 py-0.5 rounded-full">
                     <Star className="w-3 h-3 fill-amber-300 text-amber-300" /> {course.rating}
                   </span>

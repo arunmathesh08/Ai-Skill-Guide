@@ -36,14 +36,39 @@ export interface AssessmentQuestion {
   difficulty: 'beginner' | 'intermediate' | 'advanced';
 }
 
+export type CourseCategoryId = 
+  | 'fullstack' 
+  | 'frontend' 
+  | 'backend' 
+  | 'devops' 
+  | 'ai-data' 
+  | 'data-analyst';
+
+export interface CourseCategoryConfig {
+  id: CourseCategoryId;
+  title: string;
+  demandTag: string; // e.g. 'Critical Demand', 'Very High', 'High'
+  badge: string;
+  skillsCovered: string[];
+  description: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  passingScore: number; // e.g. 60
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+}
+
 export interface Assessment {
   id: string;
+  courseCategoryId: CourseCategoryId;
   title: string;
   skillCategory: string;
   description: string;
   durationMinutes: number;
   totalQuestions: number;
+  passingScore: number;
   badge: string;
+  skillsCovered: string[];
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   questions: AssessmentQuestion[];
 }
 

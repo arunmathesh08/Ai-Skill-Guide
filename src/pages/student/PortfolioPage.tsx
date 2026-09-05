@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User,
   Award,
@@ -15,7 +15,9 @@ import {
   Calendar,
   Code,
   FileText,
-  Printer
+  Printer,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Card, CardHeader } from '../../components/common/Card';
@@ -24,13 +26,238 @@ import { Badge, ProficiencyTag } from '../../components/common/Badge';
 import { ProgressBar } from '../../components/common/ProgressBar';
 import { Modal } from '../../components/common/Modal';
 
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+
 export const PortfolioPage: React.FC = () => {
   const { studentProfile, navigateTo, showToast } = useApp();
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const resumePrintRef = useRef<HTMLDivElement>(null);
+
+  // Deduplicate skills by lowercased skill name so duplicates never appear
+  const uniqueSkillsMap = new Map<string, typeof studentProfile.skills[0]>();
+  studentProfile.skills.forEach(s => {
+    const key = s.name.trim().toLowerCase();
+    const existing = uniqueSkillsMap.get(key);
+    if (!existing || s.score > existing.score) {
+      uniqueSkillsMap.set(key, s);
+    }
+  });
+  const uniqueSkills = Array.from(uniqueSkillsMap.values());
 
   const handleDownload = () => {
-    showToast('success', 'Generated SkillBridge Verified ATS Resume (PDF Simulation)', 'Resume Downloaded');
-    setIsResumeModalOpen(false);
+    setIsGeneratingPdf(true);
+
+    const cleanName = studentProfile.user.name.trim().replace(/\s+/g, '_');
+    const filename = `${cleanName}_Verified_ATS_Resume.pdf`;
+
+    try {
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      let y = 16; // Vertical position in mm
+
+      // --- 1. HEADER (NAME & CONTACT) ---
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(18);
+      doc.setTextColor(15, 23, 42); // #0f172a
+      doc.text(studentProfile.user.name.toUpperCase(), 105, y, { align: 'center' });
+
+      y += 6;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(51, 65, 85); // #334155
+      const deptText = `${studentProfile.department} • ${studentProfile.education[0]?.institution || studentProfile.user.organization}`;
+      doc.text(deptText, 105, y, { align: 'center' });
+
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      const contactText = `${studentProfile.user.email}  |  +91 98765 43210  |  NIT Campus, India  |  GitHub & LinkedIn`;
+      doc.text(contactText, 105, y, { align: 'center' });
+
+      y += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(37, 99, 235); // #2563eb
+      doc.text(`SkillBridge Verified Portfolio ID: SKB-2026-NIT-${studentProfile.rollNo}`, 105, y, { align: 'center' });
+
+      y += 4;
+      doc.setDrawColor(203, 213, 225); // #cbd5e1
+      doc.setLineWidth(0.5);
+      doc.line(15, y, 195, y);
+
+      // --- SUMMARY ---
+      if (studentProfile.bio) {
+        y += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9.5);
+        doc.setTextColor(15, 23, 42);
+        doc.text('PROFESSIONAL SUMMARY', 15, y);
+
+        y += 2;
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.3);
+        doc.line(15, y, 195, y);
+
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(51, 65, 85);
+        const splitBio = doc.splitTextToSize(studentProfile.bio, 180);
+        doc.text(splitBio, 15, y);
+        y += (splitBio.length * 4) + 2;
+      } else {
+        y += 4;
+      }
+
+      // --- 2. VERIFIED COMPETENCIES ---
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('VERIFIED TECHNICAL COMPETENCIES & ASSESSMENT REPORTS', 15, y);
+      doc.setFontSize(8);
+      doc.setTextColor(5, 150, 105); // #059669
+      doc.text('crypto-verified', 195, y, { align: 'right' });
+
+      y += 2;
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(15, y, 195, y);
+      y += 5;
+
+      // Render 2-column unique skills list
+      const skillsHalf = Math.ceil(uniqueSkills.length / 2);
+      const col1 = uniqueSkills.slice(0, skillsHalf);
+      const col2 = uniqueSkills.slice(skillsHalf);
+      const maxRows = Math.max(col1.length, col2.length);
+
+      for (let i = 0; i < maxRows; i++) {
+        const s1 = col1[i];
+        const s2 = col2[i];
+
+        if (s1) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(30, 41, 59);
+          doc.text(`${s1.name}:`, 15, y);
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(15, 23, 42);
+          const tag1 = s1.verified ? `${s1.score}%  (Verified)` : `${s1.score}%  (Self-assessed)`;
+          doc.text(tag1, 98, y, { align: 'right' });
+        }
+
+        if (s2) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(30, 41, 59);
+          doc.text(`${s2.name}:`, 108, y);
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(15, 23, 42);
+          const tag2 = s2.verified ? `${s2.score}%  (Verified)` : `${s2.score}%  (Self-assessed)`;
+          doc.text(tag2, 195, y, { align: 'right' });
+        }
+
+        y += 4.5;
+      }
+
+      y += 3;
+
+      // --- 3. FEATURED PROJECTS ---
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('FEATURED SOFTWARE ENGINEERING PROJECTS', 15, y);
+
+      y += 2;
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(15, y, 195, y);
+      y += 5;
+
+      studentProfile.projects.forEach(p => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(15, 23, 42);
+        doc.text(p.title, 15, y);
+
+        doc.setFont('courier', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        doc.text(p.techStack.join(' • '), 195, y, { align: 'right' });
+
+        y += 4;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(51, 65, 85);
+        const splitDesc = doc.splitTextToSize(p.description, 180);
+        doc.text(splitDesc, 15, y);
+        y += (splitDesc.length * 4) + 2;
+      });
+
+      y += 2;
+
+      // --- 4. EDUCATION & CERTIFICATIONS ---
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text('ACADEMIC EDUCATION & CERTIFICATIONS', 15, y);
+
+      y += 2;
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.3);
+      doc.line(15, y, 195, y);
+      y += 5;
+
+      studentProfile.education.forEach(e => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(30, 41, 59);
+        doc.text(`${e.degree} — ${e.institution} (${e.year})`, 15, y);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text(e.grade, 195, y, { align: 'right' });
+
+        y += 4.5;
+      });
+
+      if (studentProfile.certifications.length > 0) {
+        y += 2;
+        studentProfile.certifications.forEach(c => {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(30, 41, 59);
+          doc.text(`${c.title} (${c.issuer} • ${c.date})`, 15, y);
+
+          if (c.verified) {
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(5, 150, 105);
+            doc.text('(Verified Credential)', 195, y, { align: 'right' });
+          }
+          y += 4.5;
+        });
+      }
+
+      // Save PDF directly to user's Downloads folder
+      doc.save(filename);
+
+      showToast('success', 'Resume downloaded successfully!', 'PDF Download Complete');
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      showToast('error', 'Failed to generate PDF. Please try again.', 'Download Error');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
@@ -111,7 +338,7 @@ export const PortfolioPage: React.FC = () => {
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {studentProfile.skills.map(skill => (
+          {uniqueSkills.map(skill => (
             <div
               key={skill.id}
               className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all space-y-2"
@@ -193,9 +420,9 @@ export const PortfolioPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Certifications, Experience, and Education Grid */}
+      {/* Certifications & Education Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Work Experience */}
+        {/* Industry Experience */}
         <Card>
           <CardHeader
             title="Industry Experience"
@@ -267,12 +494,12 @@ export const PortfolioPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Resume Preview & Download Modal */}
+      {/* Redesigned Student ATS Resume Preview & Download Modal */}
       <Modal
         isOpen={isResumeModalOpen}
         onClose={() => setIsResumeModalOpen(false)}
         title="SkillBridge Verified ATS Resume Preview"
-        subtitle="Formatted with cryptographic skill verification badges for campus & industry recruiting"
+        subtitle="Clean, structured ATS resume formatted with student profile, verified skills, projects & education."
         maxWidth="3xl"
         footer={
           <>
@@ -282,72 +509,140 @@ export const PortfolioPage: React.FC = () => {
             <Button
               variant="primary"
               size="sm"
-              icon={<Download className="w-4 h-4" />}
+              disabled={isGeneratingPdf}
+              className="bg-brand-600 hover:bg-brand-700 text-white font-bold"
+              icon={<Download className={`w-4 h-4 ${isGeneratingPdf ? 'animate-bounce' : ''}`} />}
               onClick={handleDownload}
             >
-              Download PDF Resume
+              {isGeneratingPdf ? 'Downloading PDF...' : 'Download PDF Resume'}
             </Button>
           </>
         }
       >
-        <div className="p-6 bg-white border border-slate-300 rounded-xl shadow-inner text-slate-800 space-y-4 text-xs font-sans">
-          {/* Resume Header */}
-          <div className="text-center border-b pb-3 space-y-1">
-            <h2 className="text-xl font-bold uppercase tracking-wider text-slate-900">
+        <div
+          ref={resumePrintRef}
+          className="p-6 sm:p-8 bg-white border border-slate-300 rounded-xl shadow-xs text-slate-800 space-y-5 text-xs font-sans"
+        >
+          {/* SECTION 1: STUDENT PROFILE HEADER & SUMMARY */}
+          <div className="resume-header text-center border-b-2 border-slate-300 pb-3 space-y-1">
+            <h2 className="resume-name text-2xl font-black uppercase tracking-wider text-slate-900">
               {studentProfile.user.name}
             </h2>
-            <p className="text-xs text-slate-600">
-              {studentProfile.user.email} | +91 98765 43210 | NIT Campus | GitHub & LinkedIn
+            <p className="text-xs font-semibold text-slate-700">
+              {studentProfile.department} • {studentProfile.education[0]?.institution || studentProfile.user.organization}
             </p>
-            <p className="text-[11px] text-brand-700 font-semibold">
+            <p className="resume-contact text-xs text-slate-600 flex items-center justify-center flex-wrap gap-2 pt-0.5">
+              <span>{studentProfile.user.email}</span>
+              <span>•</span>
+              <span>+91 98765 43210</span>
+              <span>•</span>
+              <span>NIT Campus, India</span>
+              <span>•</span>
+              <span>GitHub & LinkedIn</span>
+            </p>
+            <p className="resume-id text-[11px] text-brand-600 font-mono font-bold pt-1">
               SkillBridge Verified Portfolio ID: SKB-2026-NIT-{studentProfile.rollNo}
             </p>
+
+            {/* Professional Summary / Bio */}
+            {studentProfile.bio && (
+              <div className="text-left pt-3">
+                <h4 className="section-title font-extrabold uppercase text-[11px] tracking-wider text-slate-900 border-b border-slate-300 pb-0.5 mb-1">
+                  Professional Summary
+                </h4>
+                <p className="summary-text text-xs text-slate-700 leading-relaxed">
+                  {studentProfile.bio}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Resume Verified Skills */}
+          {/* SECTION 2: VERIFIED TECHNICAL COMPETENCIES & ASSESSMENT REPORTS */}
           <div>
-            <h4 className="font-bold uppercase text-[11px] border-b pb-0.5 mb-1.5 text-slate-900">
-              Verified Technical Competencies
+            <h4 className="section-title font-extrabold uppercase text-[11px] tracking-wider text-slate-900 border-b border-slate-300 pb-0.5 mb-2 flex items-center justify-between">
+              <span>Verified Technical Competencies & Assessment Reports</span>
+              <span className="text-[10px] text-emerald-700 font-semibold lowercase">crypto-verified</span>
             </h4>
-            <div className="grid grid-cols-2 gap-1 text-[11px]">
-              {studentProfile.skills.map(s => (
-                <div key={s.id} className="flex justify-between pr-4">
-                  <span className="font-medium text-slate-800">{s.name}:</span>
-                  <span className="font-bold text-slate-900">{s.score}% ({s.verified ? 'Verified' : 'Self-assessed'})</span>
+            <div className="skills-grid grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+              {uniqueSkills.map(s => (
+                <div key={s.id} className="skill-item flex justify-between items-center pr-2 py-0.5 border-b border-slate-100">
+                  <span className="skill-name font-semibold text-slate-800">{s.name}:</span>
+                  <span className="skill-score font-bold text-slate-900 flex items-center gap-1">
+                    {s.score}%
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
+                      s.verified ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {s.verified ? 'Verified' : 'Self-assessed'}
+                    </span>
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Resume Projects */}
+          {/* SECTION 3: FEATURED SOFTWARE ENGINEERING PROJECTS */}
           <div>
-            <h4 className="font-bold uppercase text-[11px] border-b pb-0.5 mb-1.5 text-slate-900">
+            <h4 className="section-title font-extrabold uppercase text-[11px] tracking-wider text-slate-900 border-b border-slate-300 pb-0.5 mb-2">
               Featured Software Engineering Projects
             </h4>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {studentProfile.projects.map(p => (
-                <div key={p.id}>
-                  <div className="flex justify-between font-bold text-slate-900">
-                    <span>{p.title}</span>
-                    <span className="font-mono text-[10px] text-slate-500">{p.techStack.join(', ')}</span>
+                <div key={p.id} className="project-item">
+                  <div className="project-header flex justify-between items-baseline font-bold text-slate-900">
+                    <span className="text-xs">{p.title}</span>
+                    <span className="project-tech font-mono text-[10px] text-slate-500 font-semibold">
+                      {p.techStack.join(' • ')}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-slate-600">{p.description}</p>
+                  <p className="project-desc text-xs text-slate-700 leading-relaxed mt-0.5">
+                    {p.description}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Resume Education */}
-          <div>
-            <h4 className="font-bold uppercase text-[11px] border-b pb-0.5 mb-1 text-slate-900">
-              Education
-            </h4>
-            {studentProfile.education.map((e, idx) => (
-              <div key={idx} className="flex justify-between text-[11px]">
-                <span className="font-medium text-slate-800">{e.degree} — {e.institution}</span>
-                <span className="font-bold text-slate-900">{e.grade} ({e.year})</span>
+          {/* SECTION 4: EDUCATION & CERTIFICATIONS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div>
+              <h4 className="section-title font-extrabold uppercase text-[11px] tracking-wider text-slate-900 border-b border-slate-300 pb-0.5 mb-1.5">
+                Academic Education
+              </h4>
+              <div className="space-y-1.5">
+                {studentProfile.education.map((e, idx) => (
+                  <div key={idx} className="edu-item flex justify-between text-xs">
+                    <div>
+                      <div className="edu-degree font-semibold text-slate-800">{e.degree}</div>
+                      <div className="text-[10px] text-slate-500">{e.institution} ({e.year})</div>
+                    </div>
+                    <span className="edu-grade font-bold text-slate-900">{e.grade}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {studentProfile.certifications.length > 0 && (
+              <div>
+                <h4 className="section-title font-extrabold uppercase text-[11px] tracking-wider text-slate-900 border-b border-slate-300 pb-0.5 mb-1.5">
+                  Verified Certifications
+                </h4>
+                <div className="space-y-1.5">
+                  {studentProfile.certifications.map(c => (
+                    <div key={c.id} className="flex justify-between text-xs">
+                      <div>
+                        <div className="font-semibold text-slate-800">{c.title}</div>
+                        <div className="text-[10px] text-slate-500">{c.issuer} • {c.date}</div>
+                      </div>
+                      {c.verified && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded shrink-0">
+                          Verified
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </Modal>
