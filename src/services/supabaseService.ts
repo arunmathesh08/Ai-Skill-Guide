@@ -71,13 +71,16 @@ export class SupabaseService {
         return { success: false, message: 'This username is already taken. Please choose a different username.' };
       }
 
-      // 2. Create Supabase Auth Account
-      let authUserId = `usr-${userData.role.slice(0, 3)}-${Date.now()}`;
+      // 2. Create Supabase Auth Account using supabase.auth.signUp()
+      let authUserId: string | null = null;
+      const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://skillbridge-007.netlify.app';
+
       try {
         const { data: authData, error: authErr } = await supabase.auth.signUp({
           email: cleanEmail,
           password: userData.password || 'password123',
           options: {
+            emailRedirectTo: `${siteUrl}/`,
             data: {
               name: userData.name.trim(),
               username: cleanUsername,
@@ -88,12 +91,20 @@ export class SupabaseService {
 
         if (authData?.user?.id) {
           authUserId = authData.user.id;
-          console.log('[Supabase Auth] Created Auth account. User ID:', authUserId);
-        } else if (authErr && !authErr.message.includes('already registered')) {
+          console.log('[Supabase Auth] Created Auth account. User ID (auth.users.id):', authUserId);
+        } else if (authErr) {
           console.warn('[Supabase Auth SignUp Notice]:', authErr.message);
+          if (authErr.message.includes('already registered') || authErr.message.includes('already exists')) {
+            return { success: false, message: 'An account with this email address already exists. Please sign in.' };
+          }
         }
       } catch (authException) {
         console.warn('[Supabase Auth Exception]:', authException);
+      }
+
+      if (!authUserId) {
+        authUserId = `usr-${userData.role.slice(0, 3)}-${Date.now()}`;
+        console.log('[Supabase Service] Using generated ID for database record:', authUserId);
       }
 
       const initials = userData.name
@@ -103,30 +114,32 @@ export class SupabaseService {
         .slice(0, 2)
         .toUpperCase();
 
-      // 3. Insert profile into public.profiles using auth.users.id
+      // 3. Insert student details into public.profiles using auth.users.id
+      const profileRecord = {
+        id: authUserId,
+        name: userData.name.trim(),
+        username: cleanUsername,
+        email: cleanEmail,
+        password: userData.password || 'password123',
+        role: userData.role,
+        organization: userData.organization.trim(),
+        title: userData.title || (userData.role === 'student' ? 'Student' : 'Professional'),
+        avatar: initials,
+        roll_no: userData.rollNo || null,
+        department: userData.department || null,
+        batch: userData.batch || null,
+        cgpa: userData.cgpa || null,
+        bio: userData.bio || `Registered ${userData.role} on SkillBridge.`,
+        location: userData.location || null,
+        specialization: userData.specialization || null,
+        career_readiness: userData.role === 'student' ? 75 : 90,
+        career_readiness_delta: 5,
+        target_career_id: 'cp-fullstack'
+      };
+
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
-        .upsert({
-          id: authUserId,
-          name: userData.name.trim(),
-          username: cleanUsername,
-          email: cleanEmail,
-          password: userData.password || 'password123',
-          role: userData.role,
-          organization: userData.organization.trim(),
-          title: userData.title || (userData.role === 'student' ? 'Student' : 'Professional'),
-          avatar: initials,
-          roll_no: userData.rollNo || null,
-          department: userData.department || null,
-          batch: userData.batch || null,
-          cgpa: userData.cgpa || null,
-          bio: userData.bio || `Registered ${userData.role} on SkillBridge.`,
-          location: userData.location || null,
-          specialization: userData.specialization || null,
-          career_readiness: userData.role === 'student' ? 75 : 90,
-          career_readiness_delta: 5,
-          target_career_id: 'cp-fullstack'
-        })
+        .upsert(profileRecord)
         .select()
         .single();
 
@@ -142,7 +155,11 @@ export class SupabaseService {
             id: authUserId,
             name: userData.name.trim(),
             username: cleanUsername,
-            email: cleanEmail
+            email: cleanEmail,
+            college: userData.organization.trim(),
+            roll_no: userData.rollNo || null,
+            department: userData.department || null,
+            cgpa: userData.cgpa || null
           });
           console.log('[Supabase] Saved student record to public.students table with auth.users.id');
         } catch (studentErr) {
