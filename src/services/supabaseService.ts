@@ -57,25 +57,7 @@ export class SupabaseService {
       const cleanEmail = userData.email.trim().toLowerCase();
       const cleanUsername = userData.username.trim().toLowerCase().replace(/^@/, '');
 
-      // 1. Try Direct Database Bridge API (/api/register)
-      try {
-        const apiRes = await fetch('/api/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...userData, email: cleanEmail, username: cleanUsername }),
-        });
-        const apiData = await apiRes.json();
-        if (apiRes.ok && apiData.success && apiData.user) {
-          console.log('[Supabase Service] User registered directly into PostgreSQL database:', apiData.user.email);
-          return { success: true, user: apiData.user, message: apiData.message || 'Account created successfully in database!' };
-        } else if (apiRes.status === 409 || (apiData && !apiData.success && apiData.message)) {
-          return { success: false, message: apiData.message };
-        }
-      } catch (apiErr) {
-        console.warn('[Supabase Service] Direct DB API unreachable, attempting Supabase SDK client fallback...');
-      }
-
-      // 2. Check for duplicate email or username in Supabase profiles & students tables
+      // 1. Check for duplicate email or username in Supabase profiles & students tables
       const { data: existingProfiles } = await supabase
         .from('profiles')
         .select('id, email, username')
@@ -89,7 +71,7 @@ export class SupabaseService {
         return { success: false, message: 'This username is already taken. Please choose a different username.' };
       }
 
-      // 3. Create Supabase Auth Account
+      // 2. Create Supabase Auth Account
       let authUserId = `usr-${userData.role.slice(0, 3)}-${Date.now()}`;
       try {
         const { data: authData, error: authErr } = await supabase.auth.signUp({
@@ -121,7 +103,7 @@ export class SupabaseService {
         .slice(0, 2)
         .toUpperCase();
 
-      // 4. Insert profile into public.profiles using auth.users.id
+      // 3. Insert profile into public.profiles using auth.users.id
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
         .upsert({
@@ -153,7 +135,7 @@ export class SupabaseService {
         return { success: false, message: profileErr?.message || 'Failed to save profile in Supabase.' };
       }
 
-      // 5. Save into public.students table if role is student
+      // 4. Save into public.students table if role is student
       if (userData.role === 'student') {
         try {
           await supabase.from('students').upsert({
@@ -181,7 +163,7 @@ export class SupabaseService {
         specialization: profileData.specialization
       };
 
-      // 6. Create initial default verified skills for new students
+      // 5. Create initial default verified skills for new students
       if (userData.role === 'student') {
         const defaultSkills = [
           { id: `sk-js-${authUserId.slice(-6)}`, student_id: authUserId, name: 'JavaScript', category: 'Frontend', score: 75, verified: true, last_assessed: 'Recently' },
@@ -209,30 +191,7 @@ export class SupabaseService {
     try {
       const cleanIdent = identifier.trim().toLowerCase().replace(/^@/, '');
 
-      // 1. Try Direct Database Bridge API (/api/login)
-      try {
-        const apiRes = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: cleanIdent, password }),
-        });
-        const apiData = await apiRes.json();
-        if (apiRes.ok && apiData.success && apiData.user) {
-          console.log('[Supabase Service] Logged in directly via PostgreSQL database:', apiData.user.email);
-          return {
-            success: true,
-            user: apiData.user,
-            role: apiData.role || apiData.user.role,
-            message: apiData.message || `Welcome back, ${apiData.user.name}!`
-          };
-        } else if (apiRes.status === 401 || apiRes.status === 404) {
-          return { success: false, message: apiData.message };
-        }
-      } catch (apiErr) {
-        console.warn('[Supabase Service] Direct DB login unreachable, falling back to Supabase client...');
-      }
-
-      // 2. Try Supabase Auth SignInWithPassword if email pattern
+      // 1. Try Supabase Auth SignInWithPassword if email pattern
       if (cleanIdent.includes('@') && password) {
         try {
           const { data: signInData } = await supabase.auth.signInWithPassword({
@@ -672,8 +631,6 @@ export class SupabaseService {
         batch: data.batch || undefined,
         cgpa: data.cgpa || undefined,
         bio: data.bio || undefined,
-        location: data.location || undefined,
-        specialization: data.specialization || undefined
       };
     } catch (err) {
       return null;
