@@ -38,6 +38,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
 
   // Login Form State
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -92,24 +93,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setHasAttemptedSubmit(true);
+    setAuthErrorMessage(null);
 
     const emailPrefix = signupEmail.split('@')[0] || 'user';
     const finalName = fullName.trim() || (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1));
     const finalUsername = (username.trim() || emailPrefix).toLowerCase().replace(/^@/, '');
 
     if (!signupEmail.trim() || !signupPassword) {
-      showToast('warning', 'Please enter your email address and password.');
+      const msg = 'Please enter your email address and password.';
+      setAuthErrorMessage(msg);
+      showToast('warning', msg);
       return;
     }
 
     // Password Mismatch Guard
     if (signupPassword !== confirmPassword) {
-      showToast('error', 'Password mismatch. The re-typed password must match.');
+      const msg = 'Password mismatch. The re-typed password must match.';
+      setAuthErrorMessage(msg);
+      showToast('error', msg);
       return;
     }
 
     if (signupPassword.length < 6) {
-      showToast('warning', 'Password must be at least 6 characters.');
+      const msg = 'Password must be at least 6 characters.';
+      setAuthErrorMessage(msg);
+      showToast('warning', msg);
       return;
     }
 
@@ -132,6 +140,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsLoading(false);
 
     if (success) {
+      setAuthErrorMessage(null);
       onClose();
     }
   };
@@ -527,6 +536,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
             </div>
+
+            {authErrorMessage && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn mt-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{authErrorMessage}</span>
+              </div>
+            )}
 
             <div className="pt-3">
               <Button
