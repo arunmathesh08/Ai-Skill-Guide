@@ -48,6 +48,25 @@ export function getProficiencyTier(score: number): {
   };
 }
 
+export function findMatchingSkill(skillName: string, studentSkills: SkillScore[]): SkillScore | undefined {
+  if (!studentSkills || studentSkills.length === 0) return undefined;
+  const normTarget = skillName.toLowerCase().trim();
+  
+  // 1. Direct exact match
+  let match = studentSkills.find(s => s.name.toLowerCase().trim() === normTarget);
+  if (match) return match;
+
+  // 2. Key phrase token matching (e.g. "SQL & Queries" vs "SQL & Database Design" vs "SQL")
+  const tokens = normTarget.split(/[\s&,/]+/).filter(t => t.length >= 3);
+  match = studentSkills.find(s => {
+    const normS = s.name.toLowerCase().trim();
+    if (normS.includes(normTarget) || normTarget.includes(normS)) return true;
+    return tokens.some(t => normS.includes(t));
+  });
+
+  return match;
+}
+
 export function calculateCareerReadiness(career: CareerPath, studentSkills: SkillScore[]): number {
   if (!career.requiredSkills || career.requiredSkills.length === 0) return 70;
   
@@ -56,16 +75,15 @@ export function calculateCareerReadiness(career: CareerPath, studentSkills: Skil
 
   career.requiredSkills.forEach(req => {
     const weight = req.weight || 1.0;
-    const studentSkill = studentSkills.find(s => s.name.toLowerCase() === req.skillName.toLowerCase());
-    const studentScore = studentSkill ? studentSkill.score : 30; // default baseline if not assessed
+    const studentSkill = findMatchingSkill(req.skillName, studentSkills);
+    const studentScore = studentSkill ? studentSkill.score : 0;
     
-    // Ratio capped at 1.05
-    const ratio = Math.min(1.05, studentScore / req.requiredScore);
+    const ratio = Math.min(1.0, studentScore / (req.requiredScore || 1));
     totalScore += ratio * 100 * weight;
     totalWeight += weight;
   });
 
-  return Math.round(totalScore / totalWeight);
+  return Math.round(totalScore / (totalWeight || 1));
 }
 
 export function calculateSkillGaps(requiredSkills: RequiredSkill[], studentSkills: SkillScore[]): {
@@ -76,49 +94,40 @@ export function calculateSkillGaps(requiredSkills: RequiredSkill[], studentSkill
   gapSkillsCount: number;
 } {
   const gaps: SkillGapItem[] = [];
-  let totalScore = 0;
-  let gapItems: SkillGapItem[] = [];
+  let totalReadinessPoints = 0;
 
   requiredSkills.forEach(req => {
-    const studentSkill = studentSkills.find(s => s.name.toLowerCase() === req.skillName.toLowerCase());
-    const studentScore = studentSkill ? studentSkill.score : 30;
+    const studentSkill = findMatchingSkill(req.skillName, studentSkills);
+    const studentScore = studentSkill ? studentSkill.score : 0;
+    const isStrong = studentScore >= req.requiredScore;
     const gapDelta = studentScore - req.requiredScore;
-
-    let status: 'strong' | 'moderate' | 'gap' = 'moderate';
-    if (studentScore >= req.requiredScore) {
-      status = 'strong';
-    } else if (req.requiredScore - studentScore > 15) {
-      status = 'gap';
-    } else {
-      status = 'moderate';
-    }
 
     const item: SkillGapItem = {
       skillName: req.skillName,
       requiredScore: req.requiredScore,
       studentScore,
-      status,
+      status: isStrong ? 'strong' : 'gap',
       gapDelta
     };
-    
+
     gaps.push(item);
-    if (status === 'gap' || status === 'moderate') {
-      gapItems.push(item);
-    }
-    totalScore += Math.min(100, (studentScore / req.requiredScore) * 100);
+    
+    const skillReadiness = Math.min(100, Math.round((studentScore / (req.requiredScore || 1)) * 100));
+    totalReadinessPoints += skillReadiness;
   });
 
-  const overallMatchScore = Math.round(totalScore / (requiredSkills.length || 1));
-  
-  // Sort gaps by worst delta
-  gapItems.sort((a, b) => a.gapDelta - b.gapDelta);
-  const worstGaps = gapItems.slice(0, 2).map(g => g.skillName);
-  
-  let biggestOpportunity = 'You have a solid foundation across core areas. Focus on deep-dive project development.';
-  if (worstGaps.length === 1) {
-    biggestOpportunity = `Improve ${worstGaps[0]} to increase your role readiness score significantly.`;
-  } else if (worstGaps.length >= 2) {
-    biggestOpportunity = `Improve ${worstGaps[0]} and ${worstGaps[1]} to increase your career readiness for target roles.`;
+  const overallMatchScore = requiredSkills.length > 0
+    ? Math.round(totalReadinessPoints / requiredSkills.length)
+    : 0;
+
+  // Find worst gaps (where studentScore < requiredScore)
+  const gapList = gaps.filter(g => g.status === 'gap').sort((a, b) => a.gapDelta - b.gapDelta);
+
+  let biggestOpportunity = 'You have met or exceeded all required skill benchmarks for this target role!';
+  if (gapList.length === 1) {
+    biggestOpportunity = `Improve ${gapList[0].skillName} to increase your role readiness score significantly.`;
+  } else if (gapList.length >= 2) {
+    biggestOpportunity = `Improve ${gapList[0].skillName} and ${gapList[1].skillName} to increase your role readiness score significantly.`;
   }
 
   const strongSkillsCount = gaps.filter(g => g.status === 'strong').length;
@@ -151,8 +160,8 @@ export function calculateOpportunityMatch(
   const total = opportunity.requiredSkills.length || 1;
 
   opportunity.requiredSkills.forEach(req => {
-    const studentSkill = studentSkills.find(s => s.name.toLowerCase() === req.skillName.toLowerCase());
-    const score = studentSkill ? studentSkill.score : 30;
+    const studentSkill = findMatchingSkill(req.skillName, studentSkills);
+    const score = studentSkill ? studentSkill.score : 0;
 
     if (score >= req.minScore) {
       strongSkills.push(req.skillName);

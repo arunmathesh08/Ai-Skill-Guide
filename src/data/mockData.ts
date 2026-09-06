@@ -168,10 +168,11 @@ export const CAREER_PATHS: CareerPath[] = [
     demandLevel: 'Very High',
     avgSalary: '₹7.0L – ₹15.0L / yr',
     requiredSkills: [
-      { skillName: 'JavaScript', requiredScore: 85, weight: 1.2 },
-      { skillName: 'React.js', requiredScore: 80, weight: 1.3 },
       { skillName: 'HTML5 & Modern CSS', requiredScore: 85, weight: 1.0 },
+      { skillName: 'JavaScript', requiredScore: 80, weight: 1.2 },
+      { skillName: 'React.js', requiredScore: 75, weight: 1.3 },
       { skillName: 'TypeScript', requiredScore: 70, weight: 1.0 },
+      { skillName: 'Frontend Architecture', requiredScore: 70, weight: 1.0 },
       { skillName: 'Git & Version Control', requiredScore: 65, weight: 0.8 },
     ],
     roadmapSteps: [
@@ -188,10 +189,12 @@ export const CAREER_PATHS: CareerPath[] = [
     demandLevel: 'Critical Demand',
     avgSalary: '₹8.0L – ₹17.5L / yr',
     requiredSkills: [
-      { skillName: 'Node.js & Express', requiredScore: 80, weight: 1.2 },
-      { skillName: 'SQL & Database Design', requiredScore: 75, weight: 1.3 },
-      { skillName: 'Data Structures & Algorithms', requiredScore: 80, weight: 1.1 },
-      { skillName: 'Git & Version Control', requiredScore: 70, weight: 0.9 },
+      { skillName: 'Node.js', requiredScore: 80, weight: 1.2 },
+      { skillName: 'Express.js', requiredScore: 75, weight: 1.0 },
+      { skillName: 'REST APIs', requiredScore: 75, weight: 1.1 },
+      { skillName: 'SQL & Database Design', requiredScore: 80, weight: 1.3 },
+      { skillName: 'Authentication', requiredScore: 75, weight: 1.0 },
+      { skillName: 'Backend Architecture', requiredScore: 70, weight: 1.0 },
     ],
     roadmapSteps: [
       { step: 1, title: 'Data Structures & Algorithmic Complexity', description: 'Efficient algorithmic problem solving and system performance.', skills: ['Data Structures & Algorithms'], status: 'completed' },
@@ -207,10 +210,12 @@ export const CAREER_PATHS: CareerPath[] = [
     demandLevel: 'Very High',
     avgSalary: '₹9.0L – ₹20.0L / yr',
     requiredSkills: [
-      { skillName: 'Git & Version Control', requiredScore: 80, weight: 1.2 },
-      { skillName: 'SQL & Database Design', requiredScore: 65, weight: 0.8 },
-      { skillName: 'Node.js & Express', requiredScore: 65, weight: 0.8 },
-      { skillName: 'Technical Communication', requiredScore: 75, weight: 0.8 },
+      { skillName: 'Docker & Containers', requiredScore: 75, weight: 1.2 },
+      { skillName: 'Kubernetes', requiredScore: 70, weight: 1.1 },
+      { skillName: 'CI/CD Pipelines', requiredScore: 75, weight: 1.2 },
+      { skillName: 'AWS Infrastructure', requiredScore: 75, weight: 1.1 },
+      { skillName: 'Terraform & IaC', requiredScore: 70, weight: 1.0 },
+      { skillName: 'Linux Systems', requiredScore: 70, weight: 1.0 },
     ],
     roadmapSteps: [
       { step: 1, title: 'Linux & Scripting Foundations', description: 'Shell automation, bash scripting, and networking fundamentals.', skills: ['Git & Version Control'], status: 'in-progress' },
@@ -226,9 +231,12 @@ export const CAREER_PATHS: CareerPath[] = [
     demandLevel: 'Critical Demand',
     avgSalary: '₹9.5L – ₹22.0L / yr',
     requiredSkills: [
-      { skillName: 'SQL & Database Design', requiredScore: 80, weight: 1.2 },
-      { skillName: 'Data Structures & Algorithms', requiredScore: 85, weight: 1.2 },
-      { skillName: 'JavaScript', requiredScore: 70, weight: 0.7 },
+      { skillName: 'Python Programming', requiredScore: 85, weight: 1.3 },
+      { skillName: 'Machine Learning', requiredScore: 80, weight: 1.3 },
+      { skillName: 'Deep Learning & PyTorch', requiredScore: 75, weight: 1.1 },
+      { skillName: 'NLP & Large Language Models', requiredScore: 70, weight: 1.0 },
+      { skillName: 'Data Preprocessing', requiredScore: 75, weight: 1.0 },
+      { skillName: 'MLOps', requiredScore: 70, weight: 0.9 },
     ],
     roadmapSteps: [
       { step: 1, title: 'Mathematical & Statistical Foundations', description: 'Linear algebra, multivariate calculus, and probability theory.', skills: ['Data Structures & Algorithms'], status: 'completed' },
@@ -244,13 +252,15 @@ export const CAREER_PATHS: CareerPath[] = [
     demandLevel: 'High',
     avgSalary: '₹6.5L – ₹13.0L / yr',
     requiredSkills: [
-      { skillName: 'SQL & Database Design', requiredScore: 85, weight: 1.4 },
-      { skillName: 'Technical Communication', requiredScore: 80, weight: 1.0 },
-      { skillName: 'Data Structures & Algorithms', requiredScore: 70, weight: 0.9 },
+      { skillName: 'SQL & Queries', requiredScore: 80, weight: 1.3 },
+      { skillName: 'Data Analysis', requiredScore: 75, weight: 1.2 },
+      { skillName: 'Statistics & Probability', requiredScore: 70, weight: 1.1 },
+      { skillName: 'Data Visualization', requiredScore: 75, weight: 1.1 },
+      { skillName: 'Business Intelligence', requiredScore: 75, weight: 1.1 },
     ],
     roadmapSteps: [
-      { step: 1, title: 'Advanced SQL & Data Modeling', description: 'Window functions, CTEs, indexing, and dimensional modeling.', skills: ['SQL & Database Design'], status: 'in-progress' },
-      { step: 2, title: 'Data Storytelling & Executive Reporting', description: 'Building interactive BI dashboards and cross-functional presentations.', skills: ['Technical Communication'], status: 'completed' }
+      { step: 1, title: 'Advanced SQL & Data Modeling', description: 'Window functions, CTEs, indexing, and dimensional modeling.', skills: ['SQL & Queries'], status: 'in-progress' },
+      { step: 2, title: 'Data Storytelling & Executive Reporting', description: 'Building interactive BI dashboards and cross-functional presentations.', skills: ['Data Visualization', 'Business Intelligence'], status: 'completed' }
     ]
   }
 ];

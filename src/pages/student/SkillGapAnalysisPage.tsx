@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Target,
   Sparkles,
@@ -25,6 +25,12 @@ export const SkillGapAnalysisPage: React.FC = () => {
   const [selectedCareerId, setSelectedCareerId] = useState<string>(
     studentProfile.targetCareerId || 'cp-fullstack'
   );
+
+  useEffect(() => {
+    if (studentProfile.targetCareerId) {
+      setSelectedCareerId(studentProfile.targetCareerId);
+    }
+  }, [studentProfile.targetCareerId]);
 
   const currentCareer =
     CAREER_PATHS.find(c => c.id === selectedCareerId) || CAREER_PATHS[0];

@@ -21,7 +21,7 @@ import {
   INITIAL_PARTNERS,
   CAREER_PATHS
 } from '../data/mockData';
-import { calculateOpportunityMatch, calculateSkillGaps } from '../utils/skillMatcher';
+import { calculateOpportunityMatch, calculateSkillGaps, findMatchingSkill } from '../utils/skillMatcher';
 import { SupabaseService } from '../services/supabaseService';
 
 export interface ToastNotification {
@@ -123,10 +123,20 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 const STORAGE_KEY = 'skillbridge_app_state_v1';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
-  const [currentRole, setCurrentRole] = useState<UserRole>('student');
-  const [currentUser, setCurrentUser] = useState<User>(DEMO_USERS.student);
-  const [activeTab, setActiveTab] = useState<string>('landing');
+  const [authSession, setAuthSession] = useState<{ user: User; role: UserRole } | null>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_auth_session`);
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => !!authSession);
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => authSession?.role || 'student');
+  const [currentUser, setCurrentUser] = useState<User>(() => authSession?.user || DEMO_USERS.student);
+  const [activeTab, setActiveTab] = useState<string>(authSession ? 'dashboard' : 'landing');
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [selectedCareerId, setSelectedCareerId] = useState<string | null>('cp-fullstack');
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>('asm-react');
@@ -196,8 +206,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
         }
 
-        // Fetch live profile details
-        const liveProfile = await SupabaseService.fetchProfile('usr-std-01');
+        // Fetch live profile details if user logged in
+        const currentUserId = currentUser?.id || 'usr-std-01';
+        const liveProfile = await SupabaseService.fetchProfile(currentUserId);
         if (liveProfile) {
           setStudentProfile(prev => ({
             ...prev,
@@ -205,7 +216,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
         }
 
-        showToast('success', 'Connected to Supabase PostgreSQL (zuqiowzprzbshjrywzkf). Real-time persistence active.', 'Supabase Cloud Live');
+        showToast('success', 'Connected to Supabase PostgreSQL (ysqggazrfrmpvxqzmyru). Real-time persistence active.', 'Supabase Cloud Live');
       }
     }
     initSupabase();
@@ -245,11 +256,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const loginAs = (role: UserRole) => {
+    const user = DEMO_USERS[role];
     setCurrentRole(role);
-    setCurrentUser(DEMO_USERS[role]);
+    setCurrentUser(user);
     setIsLoggedIn(true);
     setActiveTab('dashboard');
-    showToast('success', `Signed in as ${DEMO_USERS[role].name} (${role.toUpperCase()})`, 'Authentication Successful');
+    localStorage.setItem(`${STORAGE_KEY}_auth_session`, JSON.stringify({ user, role }));
+    showToast('success', `Signed in as ${user.name} (${role.toUpperCase()})`, 'Authentication Successful');
   };
 
   const loginWithCredentials = async (identifier: string, password?: string): Promise<boolean> => {
@@ -259,6 +272,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentRole(res.role);
       setIsLoggedIn(true);
       setActiveTab('dashboard');
+      localStorage.setItem(`${STORAGE_KEY}_auth_session`, JSON.stringify({ user: res.user, role: res.role }));
 
       if (res.role === 'student') {
         const liveProfile = await SupabaseService.fetchProfile(res.user.id);
@@ -267,6 +281,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...prev,
             user: res.user!,
             ...liveProfile
+          }));
+        } else {
+          setStudentProfile(prev => ({
+            ...prev,
+            user: res.user!
+          }));
+        }
+
+        const liveSkills = await SupabaseService.fetchSkills();
+        if (liveSkills && liveSkills.length > 0) {
+          setStudentProfile(prev => ({
+            ...prev,
+            skills: liveSkills
           }));
         }
       }
@@ -300,15 +327,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentRole(userData.role);
       setIsLoggedIn(true);
       setActiveTab('dashboard');
+      localStorage.setItem(`${STORAGE_KEY}_auth_session`, JSON.stringify({ user: res.user, role: userData.role }));
 
       if (userData.role === 'student') {
         setStudentProfile(prev => ({
           ...prev,
           user: res.user!,
-          rollNo: userData.rollNo || '21CS8042',
-          department: userData.department || 'Computer Science & Engineering',
-          batch: userData.batch || '2022 - 2026',
-          cgpa: userData.cgpa || '8.84 / 10'
+          rollNo: userData.rollNo || undefined,
+          department: userData.department || undefined,
+          batch: userData.batch || undefined,
+          cgpa: userData.cgpa || undefined
         }));
       }
 
@@ -321,6 +349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = () => {
+    localStorage.removeItem(`${STORAGE_KEY}_auth_session`);
     setIsLoggedIn(false);
     setActiveTab('landing');
     showToast('info', 'You have been logged out of SkillBridge.', 'Logged Out');
@@ -411,50 +440,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    const calculatedScore = Math.round((correctCount / assessment.questions.length) * 100);
-    const skillName = assessment.questions[0]?.skill || 'React.js';
-
-    // Find old score
-    const existingSkill = studentProfile.skills.find(s => s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase()));
-    const previousScore = existingSkill ? existingSkill.score : 50;
-
-    // Update student skills in profile & deduplicate by skill name
-    const rawSkills = studentProfile.skills.map(s => {
-      if (s.name.toLowerCase().includes(skillName.toLowerCase()) || skillName.toLowerCase().includes(s.name.toLowerCase())) {
-        return {
-          ...s,
-          score: calculatedScore,
-          verified: true,
-          lastAssessed: 'Just now'
-        };
-      }
-      return s;
-    });
-
-    const uniqueSkillsMap = new Map<string, typeof studentProfile.skills[0]>();
-    rawSkills.forEach(s => {
-      const key = s.name.trim().toLowerCase();
-      const existing = uniqueSkillsMap.get(key);
-      if (!existing || s.score > existing.score) {
-        uniqueSkillsMap.set(key, s);
-      }
-    });
-    const updatedSkills = Array.from(uniqueSkillsMap.values());
-
-    // Recompute overall readiness delta
-    const oldReadiness = studentProfile.careerReadiness;
-    const newReadiness = Math.min(96, Math.max(65, Math.round(oldReadiness + (calculatedScore > previousScore ? 5 : -2))));
-
-    const updatedProfile: StudentProfile = {
-      ...studentProfile,
-      careerReadiness: newReadiness,
-      careerReadinessDelta: calculatedScore > previousScore ? 8 : 4,
-      skills: updatedSkills
-    };
-
     // Calculate per-skill breakdown from questions
     const skillCounts: Record<string, { total: number; correct: number }> = {};
-    assessment.questions.forEach((q, idx) => {
+    assessment.questions.forEach((q) => {
       const isCorr = answers[q.id] === q.correctOptionIndex;
       const sName = q.skill || 'General Skill';
       if (!skillCounts[sName]) {
@@ -473,6 +461,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         percentage: Math.round((correct / total) * 100)
       };
     });
+
+    const calculatedScore = Math.round((correctCount / assessment.questions.length) * 100);
+    const skillName = assessment.questions[0]?.skill || 'React.js';
+
+    // Find old score for primary skill
+    const existingSkill = findMatchingSkill(skillName, studentProfile.skills);
+    const previousScore = existingSkill ? existingSkill.score : 50;
+
+    // Update student skills in profile for all skills tested in breakdown
+    let updatedSkillList = [...studentProfile.skills];
+    skillBreakdown.forEach(sb => {
+      const matched = findMatchingSkill(sb.skill, updatedSkillList);
+      if (matched) {
+        updatedSkillList = updatedSkillList.map(s => {
+          if (s.name.toLowerCase().trim() === matched.name.toLowerCase().trim()) {
+            return {
+              ...s,
+              score: sb.percentage,
+              verified: true,
+              lastAssessed: 'Just now'
+            };
+          }
+          return s;
+        });
+      } else {
+        updatedSkillList.push({
+          id: `sk-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          name: sb.skill,
+          category: (assessment.skillCategory as any) || 'Domain Skill',
+          score: sb.percentage,
+          verified: true,
+          lastAssessed: 'Just now'
+        });
+      }
+    });
+
+    const uniqueSkillsMap = new Map<string, typeof studentProfile.skills[0]>();
+    updatedSkillList.forEach(s => {
+      const key = s.name.trim().toLowerCase();
+      const existing = uniqueSkillsMap.get(key);
+      if (!existing || s.score > existing.score) {
+        uniqueSkillsMap.set(key, s);
+      }
+    });
+    const updatedSkills = Array.from(uniqueSkillsMap.values());
+
+    // Map course category to target career path
+    const courseToCareerMap: Record<string, string> = {
+      'data-analyst': 'cp-data-analyst',
+      'fullstack': 'cp-fullstack',
+      'frontend': 'cp-frontend',
+      'backend': 'cp-backend',
+      'devops': 'cp-cloud-devops',
+      'ai-data': 'cp-ai-ml'
+    };
+    const newTargetCareerId = courseToCareerMap[assessment.courseCategoryId] || studentProfile.targetCareerId || 'cp-fullstack';
+    const targetCareer = CAREER_PATHS.find(c => c.id === newTargetCareerId) || CAREER_PATHS[0];
+
+    // Compute dynamic readiness score from skill gaps
+    const gapAnalysis = calculateSkillGaps(targetCareer.requiredSkills, updatedSkills);
+    const newReadiness = gapAnalysis.overallMatchScore;
+    const oldReadiness = studentProfile.careerReadiness;
+    const delta = newReadiness - oldReadiness;
+
+    const updatedProfile: StudentProfile = {
+      ...studentProfile,
+      targetCareerId: newTargetCareerId,
+      careerReadiness: newReadiness,
+      careerReadinessDelta: delta !== 0 ? delta : 5,
+      skills: updatedSkills
+    };
 
     const passingScore = assessment.passingScore || 60;
     const isPassed = calculatedScore >= passingScore;

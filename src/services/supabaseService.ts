@@ -12,6 +12,7 @@ import {
   CorporatePartner
 } from '../types';
 import {
+  DEMO_USERS,
   INITIAL_STUDENT_PROFILE,
   MOCK_OPPORTUNITIES,
   INITIAL_APPLICATIONS,
@@ -34,7 +35,7 @@ export class SupabaseService {
   }
 
   /**
-   * Register a new user and store in Supabase profiles grouped by role
+   * Register a new user and store in Supabase profiles & students tables
    */
   public static async registerUser(userData: {
     name: string;
@@ -53,26 +54,66 @@ export class SupabaseService {
     specialization?: string;
   }): Promise<{ success: boolean; user?: User; message: string }> {
     try {
-      // 1. Try Direct PostgreSQL Backend Bridge (/api/register)
+      const cleanEmail = userData.email.trim().toLowerCase();
+      const cleanUsername = userData.username.trim().toLowerCase().replace(/^@/, '');
+
+      // 1. Try Direct Database Bridge API (/api/register)
       try {
         const apiRes = await fetch('/api/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userData),
+          body: JSON.stringify({ ...userData, email: cleanEmail, username: cleanUsername }),
         });
-        if (apiRes.ok) {
-          const apiData = await apiRes.json();
-          if (apiData.success && apiData.user) {
-            console.log('[Supabase Service] User registered directly into PostgreSQL database:', apiData.user.email);
-            return { success: true, user: apiData.user, message: apiData.message || 'Account created successfully in database!' };
-          }
+        const apiData = await apiRes.json();
+        if (apiRes.ok && apiData.success && apiData.user) {
+          console.log('[Supabase Service] User registered directly into PostgreSQL database:', apiData.user.email);
+          return { success: true, user: apiData.user, message: apiData.message || 'Account created successfully in database!' };
+        } else if (apiRes.status === 409 || (apiData && !apiData.success && apiData.message)) {
+          return { success: false, message: apiData.message };
         }
       } catch (apiErr) {
-        console.warn('[Supabase Service] Direct DB API unreachable, attempting Supabase client fallback...');
+        console.warn('[Supabase Service] Direct DB API unreachable, attempting Supabase SDK client fallback...');
       }
 
-      // 2. Try Supabase REST Client
-      const userId = `usr-${userData.role.slice(0, 3)}-${Date.now()}`;
+      // 2. Check for duplicate email or username in Supabase profiles & students tables
+      const { data: existingProfiles } = await supabase
+        .from('profiles')
+        .select('id, email, username')
+        .or(`email.ilike."${cleanEmail}",username.ilike."${cleanUsername}"`);
+
+      if (existingProfiles && existingProfiles.length > 0) {
+        const isEmailMatch = existingProfiles.some(u => u.email?.toLowerCase() === cleanEmail);
+        if (isEmailMatch) {
+          return { success: false, message: 'An account with this email address already exists. Please sign in.' };
+        }
+        return { success: false, message: 'This username is already taken. Please choose a different username.' };
+      }
+
+      // 3. Create Supabase Auth Account
+      let authUserId = `usr-${userData.role.slice(0, 3)}-${Date.now()}`;
+      try {
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password: userData.password || 'password123',
+          options: {
+            data: {
+              name: userData.name.trim(),
+              username: cleanUsername,
+              role: userData.role
+            }
+          }
+        });
+
+        if (authData?.user?.id) {
+          authUserId = authData.user.id;
+          console.log('[Supabase Auth] Created Auth account. User ID:', authUserId);
+        } else if (authErr && !authErr.message.includes('already registered')) {
+          console.warn('[Supabase Auth SignUp Notice]:', authErr.message);
+        }
+      } catch (authException) {
+        console.warn('[Supabase Auth Exception]:', authException);
+      }
+
       const initials = userData.name
         .split(' ')
         .map(w => w[0])
@@ -80,16 +121,17 @@ export class SupabaseService {
         .slice(0, 2)
         .toUpperCase();
 
-      const { data, error } = await supabase
+      // 4. Insert profile into public.profiles using auth.users.id
+      const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
-        .insert({
-          id: userId,
-          name: userData.name,
-          username: userData.username.toLowerCase().trim(),
-          email: userData.email.toLowerCase().trim(),
+        .upsert({
+          id: authUserId,
+          name: userData.name.trim(),
+          username: cleanUsername,
+          email: cleanEmail,
           password: userData.password || 'password123',
           role: userData.role,
-          organization: userData.organization,
+          organization: userData.organization.trim(),
           title: userData.title || (userData.role === 'student' ? 'Student' : 'Professional'),
           avatar: initials,
           roll_no: userData.rollNo || null,
@@ -99,60 +141,60 @@ export class SupabaseService {
           bio: userData.bio || `Registered ${userData.role} on SkillBridge.`,
           location: userData.location || null,
           specialization: userData.specialization || null,
-          career_readiness: userData.role === 'student' ? 70 : 90,
+          career_readiness: userData.role === 'student' ? 75 : 90,
           career_readiness_delta: 5,
           target_career_id: 'cp-fullstack'
         })
         .select()
         .single();
 
-      if (!error && data) {
-        const registeredUser: User = {
-          id: data.id,
-          name: data.name,
-          username: data.username,
-          email: data.email,
-          role: data.role,
-          organization: data.organization,
-          title: data.title,
-          avatar: data.avatar,
-          location: data.location,
-          specialization: data.specialization
-        };
-
-        if (userData.role === 'student') {
-          const defaultSkills = [
-            { id: `sk-js-${userId}`, student_id: userId, name: 'JavaScript', category: 'Frontend', score: 75, verified: true },
-            { id: `sk-react-${userId}`, student_id: userId, name: 'React.js', category: 'Frontend', score: 65, verified: false },
-            { id: `sk-sql-${userId}`, student_id: userId, name: 'SQL & Database Design', category: 'Database', score: 60, verified: false },
-          ];
-          await supabase.from('skills').insert(defaultSkills);
-        }
-
-        return { success: true, user: registeredUser, message: 'Account created successfully in Supabase!' };
+      if (profileErr || !profileData) {
+        console.error('[Supabase Register Profile Error]:', profileErr);
+        return { success: false, message: profileErr?.message || 'Failed to save profile in Supabase.' };
       }
 
-      // 3. Graceful Local Fallback: Never block the user
-      console.warn('[Supabase Register Fallback]: Creating local verified profile session');
-      const fallbackUser: User = {
-        id: userId,
-        name: userData.name,
-        username: userData.username,
-        email: userData.email,
-        role: userData.role,
-        organization: userData.organization,
-        title: userData.title || (userData.role === 'student' ? 'Student' : 'Professional'),
-        avatar: initials,
-        location: userData.location,
-        specialization: userData.specialization
+      // 5. Save into public.students table if role is student
+      if (userData.role === 'student') {
+        try {
+          await supabase.from('students').upsert({
+            id: authUserId,
+            name: userData.name.trim(),
+            username: cleanUsername,
+            email: cleanEmail
+          });
+          console.log('[Supabase] Saved student record to public.students table with auth.users.id');
+        } catch (studentErr) {
+          console.warn('[Supabase Students Table Notice]:', studentErr);
+        }
+      }
+
+      const registeredUser: User = {
+        id: profileData.id,
+        name: profileData.name,
+        username: profileData.username,
+        email: profileData.email,
+        role: profileData.role as UserRole,
+        organization: profileData.organization,
+        title: profileData.title,
+        avatar: profileData.avatar,
+        location: profileData.location,
+        specialization: profileData.specialization
       };
 
-      return {
-        success: true,
-        user: fallbackUser,
-        message: 'Account created and initialized successfully!'
-      };
+      // 6. Create initial default verified skills for new students
+      if (userData.role === 'student') {
+        const defaultSkills = [
+          { id: `sk-js-${authUserId.slice(-6)}`, student_id: authUserId, name: 'JavaScript', category: 'Frontend', score: 75, verified: true, last_assessed: 'Recently' },
+          { id: `sk-react-${authUserId.slice(-6)}`, student_id: authUserId, name: 'React.js', category: 'Frontend', score: 65, verified: false, last_assessed: 'Recently' },
+          { id: `sk-sql-${authUserId.slice(-6)}`, student_id: authUserId, name: 'SQL & Database Design', category: 'Database', score: 60, verified: false, last_assessed: 'Recently' },
+        ];
+        await supabase.from('skills').upsert(defaultSkills);
+      }
+
+      console.log('[Supabase Service] User registered successfully in Supabase Cloud:', registeredUser.email);
+      return { success: true, user: registeredUser, message: 'Account created successfully in Supabase!' };
     } catch (err: any) {
+      console.error('[Supabase Register Exception]:', err);
       return { success: false, message: err.message || 'Registration failed' };
     }
   }
@@ -167,41 +209,81 @@ export class SupabaseService {
     try {
       const cleanIdent = identifier.trim().toLowerCase().replace(/^@/, '');
 
-      // 1. Try Direct PostgreSQL Backend Bridge (/api/login)
+      // 1. Try Direct Database Bridge API (/api/login)
       try {
         const apiRes = await fetch('/api/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: cleanIdent, password }),
         });
-        if (apiRes.ok) {
-          const apiData = await apiRes.json();
-          if (apiData.success && apiData.user) {
-            console.log('[Supabase Service] Logged in directly via PostgreSQL database:', apiData.user.email);
-            return {
-              success: true,
-              user: apiData.user,
-              role: apiData.role || apiData.user.role,
-              message: apiData.message || `Welcome back, ${apiData.user.name}!`
-            };
-          }
+        const apiData = await apiRes.json();
+        if (apiRes.ok && apiData.success && apiData.user) {
+          console.log('[Supabase Service] Logged in directly via PostgreSQL database:', apiData.user.email);
+          return {
+            success: true,
+            user: apiData.user,
+            role: apiData.role || apiData.user.role,
+            message: apiData.message || `Welcome back, ${apiData.user.name}!`
+          };
+        } else if (apiRes.status === 401 || apiRes.status === 404) {
+          return { success: false, message: apiData.message };
         }
       } catch (apiErr) {
         console.warn('[Supabase Service] Direct DB login unreachable, falling back to Supabase client...');
       }
 
-      // 2. Search via Supabase Client
+      // 2. Try Supabase Auth SignInWithPassword if email pattern
+      if (cleanIdent.includes('@') && password) {
+        try {
+          const { data: signInData } = await supabase.auth.signInWithPassword({
+            email: cleanIdent,
+            password
+          });
+          if (signInData?.user?.id) {
+            const { data: authProf } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', signInData.user.id)
+              .single();
+
+            if (authProf) {
+              const authUser: User = {
+                id: authProf.id,
+                name: authProf.name,
+                username: authProf.username,
+                email: authProf.email,
+                role: authProf.role as UserRole,
+                organization: authProf.organization,
+                title: authProf.title,
+                avatar: authProf.avatar || 'SB',
+                location: authProf.location,
+                specialization: authProf.specialization
+              };
+              return {
+                success: true,
+                user: authUser,
+                role: authProf.role as UserRole,
+                message: `Welcome back, ${authProf.name}!`
+              };
+            }
+          }
+        } catch (authErr) {
+          console.warn('[Supabase Auth SignIn Notice]:', authErr);
+        }
+      }
+
+      // 2. Search via Supabase Client Profiles table
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .or(`email.ilike.${cleanIdent},username.ilike.${cleanIdent}`)
+        .or(`email.ilike."${cleanIdent}",username.ilike."${cleanIdent}"`)
         .limit(1);
 
       if (!error && data && data.length > 0) {
         const userRecord = data[0];
 
         if (password && userRecord.password && userRecord.password !== password) {
-          return { success: false, message: 'Incorrect password. Please try again.' };
+          return { success: false, message: 'Incorrect password. Please check your password and try again.' };
         }
 
         const authenticatedUser: User = {
@@ -226,19 +308,22 @@ export class SupabaseService {
       }
 
       // 3. Check Demo Users Fallback
-      const matchedDemo = Object.values(INITIAL_STUDENT_PROFILE).find((u: any) =>
-        u?.email?.toLowerCase() === cleanIdent || u?.username?.toLowerCase() === cleanIdent
-      );
-      if (matchedDemo) {
+      const matchedDemoKey = (Object.keys(DEMO_USERS) as UserRole[]).find((key) => {
+        const u = DEMO_USERS[key];
+        return u.email.toLowerCase() === cleanIdent || u.username?.toLowerCase() === cleanIdent;
+      });
+
+      if (matchedDemoKey) {
+        const matchedDemo = DEMO_USERS[matchedDemoKey];
         return {
           success: true,
-          user: matchedDemo as any,
-          role: (matchedDemo as any).role || 'student',
-          message: `Welcome back, ${(matchedDemo as any).name}!`
+          user: matchedDemo,
+          role: matchedDemoKey,
+          message: `Welcome back, ${matchedDemo.name}!`
         };
       }
 
-      return { success: false, message: 'User not found. Please check your username or email.' };
+      return { success: false, message: 'User not found. Please check your username or email address.' };
     } catch (err: any) {
       return { success: false, message: err.message || 'Login failed' };
     }
@@ -567,14 +652,28 @@ export class SupabaseService {
       if (error || !data) return null;
 
       return {
+        user: {
+          id: data.id,
+          name: data.name,
+          username: data.username,
+          email: data.email,
+          role: data.role as UserRole,
+          organization: data.organization,
+          title: data.title || 'Student',
+          avatar: data.avatar || 'SB',
+          location: data.location || undefined,
+          specialization: data.specialization || undefined
+        },
         careerReadiness: data.career_readiness,
         careerReadinessDelta: data.career_readiness_delta,
         targetCareerId: data.target_career_id,
-        rollNo: data.roll_no,
-        department: data.department,
-        batch: data.batch,
-        cgpa: data.cgpa,
-        bio: data.bio,
+        rollNo: data.roll_no || undefined,
+        department: data.department || undefined,
+        batch: data.batch || undefined,
+        cgpa: data.cgpa || undefined,
+        bio: data.bio || undefined,
+        location: data.location || undefined,
+        specialization: data.specialization || undefined
       };
     } catch (err) {
       return null;

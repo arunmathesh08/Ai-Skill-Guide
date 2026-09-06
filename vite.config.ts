@@ -72,6 +72,22 @@ function databaseApiPlugin(): Plugin {
 
             const cleanEmail = email.toLowerCase().trim();
             const cleanUsername = (username || cleanEmail.split('@')[0]).toLowerCase().trim().replace(/^@/, '');
+
+            // Pre-check for duplicate username or email in students / profiles
+            const dupCheck = await dbPool.query(`
+              SELECT id, email, username FROM public.profiles 
+              WHERE lower(email) = $1 OR lower(username) = $2
+              LIMIT 1;
+            `, [cleanEmail, cleanUsername]);
+
+            if (dupCheck.rows.length > 0) {
+              const existing = dupCheck.rows[0];
+              if (existing.email && existing.email.toLowerCase() === cleanEmail) {
+                return sendJson(409, { success: false, message: 'An account with this email address already exists. Please sign in.' });
+              }
+              return sendJson(409, { success: false, message: 'This username is already taken. Please choose a different username.' });
+            }
+
             const userId = `usr-${role.slice(0, 3)}-${Date.now()}`;
             const initials = name
               .split(' ')
@@ -80,6 +96,24 @@ function databaseApiPlugin(): Plugin {
               .slice(0, 2)
               .toUpperCase();
 
+            // Insert into public.students if student
+            if (role === 'student') {
+              try {
+                await dbPool.query(`
+                  INSERT INTO public.students (id, name, username, email)
+                  VALUES ($1, $2, $3, $4)
+                  ON CONFLICT (id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    username = EXCLUDED.username,
+                    email = EXCLUDED.email;
+                `, [userId, name.trim(), cleanUsername, cleanEmail]);
+                console.log(`[DB API] ✅ Inserted student record into public.students table for ${cleanEmail}`);
+              } catch (stuErr) {
+                console.warn('[DB API] Students table insert notice:', stuErr);
+              }
+            }
+
+            // Insert into public.profiles
             const query = `
               INSERT INTO public.profiles (
                 id, name, username, email, password, role, organization, 
@@ -142,7 +176,7 @@ function databaseApiPlugin(): Plugin {
               }
             }
 
-            console.log(`[DB API] ✅ Successfully registered user: ${savedUser.name} (${savedUser.email})`);
+            console.log(`[DB API] ✅ Successfully registered user in Supabase: ${savedUser.name} (${savedUser.email})`);
 
             return sendJson(200, {
               success: true,
