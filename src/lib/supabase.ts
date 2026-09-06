@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://zuqiowzprzbshjrywzkf.supabase.co';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ysqggazrfrmpvxqzmyru.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_s8GW6jTe1OlDrPjokLv5zw_QLCisWEO';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -31,8 +31,8 @@ export async function checkSupabaseConnection(): Promise<{ ok: boolean; message:
         Authorization: `Bearer ${supabaseAnonKey}`,
       },
     });
-    if (res.ok || res.status === 200 || res.status === 404 || res.status === 401) {
-      return { ok: true, message: 'Connected to Supabase Project (zuqiowzprzbshjrywzkf)' };
+    if (res.ok || res.status === 200 || res.status === 404) {
+      return { ok: true, message: 'Connected to Supabase Project (ysqggazrfrmpvxqzmyru)' };
     }
     return { ok: false, message: `Server returned status ${res.status}` };
   } catch (err: any) {

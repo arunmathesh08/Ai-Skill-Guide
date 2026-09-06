@@ -137,7 +137,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenMobileSidebar }) => {
         {/* Supabase Connection Status Pill */}
         <div
           className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold shrink-0"
-          title="Supabase PostgreSQL REST API Connected (zuqiowzprzbshjrywzkf)"
+          title="Supabase PostgreSQL REST API Connected (ysqggazrfrmpvxqzmyru)"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
           <span className="text-[11px] font-mono font-bold whitespace-nowrap">Cloud Connected</span>
