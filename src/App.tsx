@@ -16,6 +16,7 @@ import { CareerDetailPage } from './pages/student/CareerDetailPage';
 import { OpportunitiesPage } from './pages/student/OpportunitiesPage';
 import { OpportunityDetailPage } from './pages/student/OpportunityDetailPage';
 import { ApplicationsPage } from './pages/student/ApplicationsPage';
+import { NotificationsPage } from './pages/student/NotificationsPage';
 import { LearningPage } from './pages/student/LearningPage';
 import { PortfolioPage } from './pages/student/PortfolioPage';
 import { ProfileSetupPage } from './pages/student/ProfileSetupPage';
@@ -80,7 +81,7 @@ export const App: React.FC = () => {
         case 'profile-setup':
           return <ProfileSetupPage />;
         case 'notifications':
-          return <ApplicationsPage />;
+          return <NotificationsPage />;
         default:
           return <StudentDashboard />;
       }

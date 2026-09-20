@@ -26,8 +26,10 @@ import { Card, CardHeader } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { ProgressBar } from '../../components/common/ProgressBar';
-import { CAREER_PATHS } from '../../data/mockData';
-import { SkillScore } from '../../types';
+import { CAREER_PATHS, INITIAL_STUDENT_PROFILE } from '../../data/mockData';
+import { formatSalary } from '../../utils/salaryUtils';
+import { calculateSkillGaps } from '../../utils/skillMatcher';
+import { SkillScore, ProficiencyTier } from '../../types';
 
 interface ProfileSetupPageProps {
   onComplete?: () => void;
@@ -398,7 +400,7 @@ export const ProfileSetupPage: React.FC<ProfileSetupPageProps> = ({ onComplete }
                     </div>
                     <p className="text-[11px] text-slate-500 line-clamp-2">{path.description}</p>
                     <div className="mt-2 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded inline-block">
-                      {path.avgSalary}
+                      {formatSalary(path.avgSalary)}
                     </div>
                   </button>
                 ))}
@@ -639,7 +641,18 @@ export const ProfileSetupPage: React.FC<ProfileSetupPageProps> = ({ onComplete }
 
               <div className="text-right">
                 <span className="text-xs font-bold text-emerald-400 block">
-                  Initial Computed Readiness: ~76%
+                  Initial Computed Readiness: {(() => {
+                    const customSkillList: SkillScore[] = Object.keys(selectedSkills).map((k, i) => ({
+                      id: `custom-sk-${i}`,
+                      name: k,
+                      category: 'Frontend' as const,
+                      score: selectedSkills[k],
+                      verified: true,
+                      lastAssessed: 'Today'
+                    }));
+                    const gaps = calculateSkillGaps(selectedCareer.requiredSkills, customSkillList, selectedCareer.title, true);
+                    return `${gaps.overallMatchScore}%`;
+                  })()}
                 </span>
                 <span className="text-[10px] text-slate-400">Based on {Object.keys(selectedSkills).length} custom skills</span>
               </div>

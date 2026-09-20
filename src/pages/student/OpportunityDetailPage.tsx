@@ -23,6 +23,7 @@ import { Modal } from '../../components/common/Modal';
 import { ProgressBar } from '../../components/common/ProgressBar';
 import { MatchScoreBadge } from '../../components/common/MatchScoreBadge';
 import { calculateOpportunityMatch } from '../../utils/skillMatcher';
+import { formatSalary } from '../../utils/salaryUtils';
 import confetti from 'canvas-confetti';
 
 export const OpportunityDetailPage: React.FC = () => {
@@ -31,6 +32,8 @@ export const OpportunityDetailPage: React.FC = () => {
     opportunities,
     studentProfile,
     applications,
+    currentUser,
+    hasTakenAssessment,
     applyToOpportunity,
     navigateTo
   } = useApp();
@@ -42,9 +45,10 @@ export const OpportunityDetailPage: React.FC = () => {
   const opp =
     opportunities.find(o => o.id === selectedOpportunityId) || opportunities[0];
 
-  const match = calculateOpportunityMatch(opp, studentProfile.skills);
-  const isApplied = applications.some(a => a.opportunityId === opp.id);
-  const activeApp = applications.find(a => a.opportunityId === opp.id);
+  const userApplications = applications.filter(a => a.studentId === currentUser.id);
+  const match = calculateOpportunityMatch(opp, studentProfile.skills, hasTakenAssessment);
+  const isApplied = userApplications.some(a => a.opportunityId === opp.id);
+  const activeApp = userApplications.find(a => a.opportunityId === opp.id);
 
   const handleApply = () => {
     setIsSubmitting(true);
@@ -115,7 +119,7 @@ export const OpportunityDetailPage: React.FC = () => {
                 </span>
                 <span>•</span>
                 <span className="font-mono text-emerald-700 font-bold">
-                  {opp.stipendSalary}
+                  {formatSalary(opp.stipendSalary)}
                 </span>
               </p>
             </div>

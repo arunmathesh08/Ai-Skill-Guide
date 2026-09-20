@@ -62,7 +62,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   const mobileNavItems = getMobileNavItems();
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-800 antialiased selection:bg-brand-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0b0f19] flex flex-col font-sans text-slate-800 dark:text-slate-100 antialiased selection:bg-brand-500 selection:text-white transition-colors duration-200">
       {/* Sidebar (Responsive Drawer on Mobile) */}
       <Sidebar isOpenMobile={isOpenMobile} setIsOpenMobile={setIsOpenMobile} />
 
@@ -77,7 +77,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
       {/* Mobile Bottom Navigation Bar for All Roles */}
       {mobileNavItems.length > 0 && (
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 flex items-center justify-around shadow-lg">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-2 py-1.5 flex items-center justify-around shadow-lg">
           {mobileNavItems.map(item => {
             const isActive = activeTab === item.id;
             return (
@@ -85,7 +85,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                 key={item.id}
                 onClick={() => navigateTo(item.id)}
                 className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-medium transition-colors cursor-pointer ${
-                  isActive ? 'text-brand-600 font-bold bg-brand-50/60' : 'text-slate-500 hover:text-slate-800'
+                  isActive ? 'text-brand-600 dark:text-brand-400 font-bold bg-brand-50/60 dark:bg-brand-950/60' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 {item.icon}

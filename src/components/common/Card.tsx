@@ -25,8 +25,8 @@ export const Card: React.FC<CardProps> = ({
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-xl border border-slate-200/90 shadow-card transition-all duration-200 ${
-        hover ? 'hover:shadow-card-hover hover:border-slate-300 hover:-translate-y-0.5 cursor-pointer' : ''
+      className={`bg-white dark:bg-[#111827] rounded-xl border border-slate-200/90 dark:border-slate-800/80 shadow-card transition-all duration-200 ${
+        hover ? 'hover:shadow-card-hover hover:border-slate-300 dark:hover:border-slate-700 hover:-translate-y-0.5 cursor-pointer' : ''
       } ${paddingClasses[padding]} ${className}`}
     >
       {children}
@@ -44,10 +44,10 @@ export const CardHeader: React.FC<{
   return (
     <div className={`flex items-start justify-between gap-4 mb-4 ${className}`}>
       <div className="flex items-center gap-2.5">
-        {icon && <div className="p-2 rounded-lg bg-brand-50 text-brand-600 shrink-0">{icon}</div>}
+        {icon && <div className="p-2 rounded-lg bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 shrink-0">{icon}</div>}
         <div>
-          <h3 className="font-bold text-slate-900 text-base sm:text-lg tracking-tight">{title}</h3>
-          {subtitle && <p className="text-xs sm:text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+          <h3 className="font-bold text-slate-900 dark:text-slate-100 text-base sm:text-lg tracking-tight">{title}</h3>
+          {subtitle && <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
         </div>
       </div>
       {action && <div className="shrink-0">{action}</div>}

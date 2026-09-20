@@ -63,17 +63,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthErrorMessage(null);
+
     if (!loginIdentifier.trim()) {
-      showToast('warning', 'Please enter your username or email address.');
+      const msg = 'Please enter your username or email address.';
+      setAuthErrorMessage(msg);
+      showToast('warning', msg);
       return;
     }
 
     setIsLoading(true);
-    const success = await loginWithCredentials(loginIdentifier, loginPassword);
+    const res = await loginWithCredentials(loginIdentifier, loginPassword);
     setIsLoading(false);
 
-    if (success) {
+    if (res.success) {
+      setAuthErrorMessage(null);
       onClose();
+    } else {
+      setAuthErrorMessage(res.message || 'Invalid username/email or password.');
     }
   };
 
@@ -99,49 +106,100 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const finalName = fullName.trim() || (emailPrefix.charAt(0).toUpperCase() + emailPrefix.slice(1));
     const finalUsername = (username.trim() || emailPrefix).toLowerCase().replace(/^@/, '');
 
-    if (!signupEmail.trim() || !signupPassword) {
-      const msg = 'Please enter your email address and password.';
-      setAuthErrorMessage(msg);
-      showToast('warning', msg);
+    // === COMPREHENSIVE VALIDATION ===
+
+    // 1. Email validation
+    if (!signupEmail.trim()) {
+      setAuthErrorMessage('Please enter your email address.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(signupEmail.trim())) {
+      setAuthErrorMessage('Please enter a valid email address (e.g. name@institution.edu.in).');
       return;
     }
 
-    // Password Mismatch Guard
-    if (signupPassword !== confirmPassword) {
-      const msg = 'Password mismatch. The re-typed password must match.';
-      setAuthErrorMessage(msg);
-      showToast('error', msg);
+    // 2. Password validation
+    if (!signupPassword) {
+      setAuthErrorMessage('Please enter a password.');
       return;
     }
-
     if (signupPassword.length < 6) {
-      const msg = 'Password must be at least 6 characters.';
-      setAuthErrorMessage(msg);
-      showToast('warning', msg);
+      setAuthErrorMessage('Password must be at least 6 characters.');
       return;
     }
 
-    setIsLoading(true);
-    const success = await registerWithCredentials({
-      name: finalName,
-      username: finalUsername,
-      email: signupEmail.trim().toLowerCase(),
-      password: signupPassword,
-      role: selectedRole,
-      organization: organization.trim() || (selectedRole === 'student' ? 'Kongu Engineering College (KEC)' : 'TechNova Solutions'),
-      title: title.trim() || (selectedRole === 'student' ? 'Student' : 'Talent Lead'),
-      rollNo: rollNo.trim() || '25CSR011',
-      department: department.trim() || 'Computer Science & Engineering',
-      batch: batch.trim() || '2022 - 2026',
-      cgpa: cgpa.trim() || '8.8 / 10',
-      location: location.trim(),
-      specialization: specialization.trim()
-    });
-    setIsLoading(false);
+    // 3. Confirm password match
+    if (signupPassword !== confirmPassword) {
+      setAuthErrorMessage('Password mismatch. The re-typed password must match.');
+      showToast('error', 'Password mismatch. The re-typed password must match.');
+      return;
+    }
 
-    if (success) {
-      setAuthErrorMessage(null);
-      onClose();
+    // 4. College/Organization validation (required for all roles)
+    if (!organization.trim()) {
+      const label = selectedRole === 'student' ? 'College / University Name'
+        : selectedRole === 'industry' ? 'Company / Organization Name'
+        : 'Institution / Department Name';
+      setAuthErrorMessage(`${label} is required.`);
+      return;
+    }
+
+    // 5. Student-specific validation
+    if (selectedRole === 'student') {
+      if (!rollNo.trim()) {
+        setAuthErrorMessage('Roll / Registration Number is required.');
+        return;
+      }
+      if (!department.trim()) {
+        setAuthErrorMessage('Department is required.');
+        return;
+      }
+      // CGPA validation — accept "8.8", "8.8 / 10", "9.1/10" etc.
+      if (cgpa.trim()) {
+        const cgpaNumeric = parseFloat(cgpa.trim().split('/')[0].trim());
+        if (isNaN(cgpaNumeric) || cgpaNumeric < 0 || cgpaNumeric > 10) {
+          setAuthErrorMessage('Please enter a valid CGPA (0 to 10).');
+          return;
+        }
+      }
+    }
+
+    // === ALL VALIDATION PASSED — SUBMIT ===
+    setIsLoading(true);
+    try {
+      const res = await registerWithCredentials({
+        name: finalName,
+        username: finalUsername,
+        email: signupEmail.trim().toLowerCase(),
+        password: signupPassword,
+        role: selectedRole,
+        organization: organization.trim(),
+        title: title.trim() || (selectedRole === 'student' ? 'Student' : 'Talent Lead'),
+        rollNo: rollNo.trim(),
+        department: department.trim(),
+        batch: batch.trim() || '2022 - 2026',
+        cgpa: cgpa.trim(),
+        location: location.trim(),
+        specialization: specialization.trim()
+      });
+
+      if (res.success) {
+        setAuthErrorMessage(null);
+        showToast('success', 'Account created successfully! Redirecting to dashboard...', 'Welcome to SkillBridge');
+        // Brief delay to show success before closing
+        setTimeout(() => {
+          setIsLoading(false);
+          onClose();
+        }, 600);
+      } else {
+        setIsLoading(false);
+        setAuthErrorMessage(res.message || 'Registration failed. Please check your inputs.');
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      console.error('[AuthModal] Signup error:', err);
+      setAuthErrorMessage('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -184,7 +242,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Navigation Tabs: Sign In / Create Account */}
         <div className="flex border border-slate-200 bg-slate-100/90 p-1.5 rounded-xl shadow-2xs">
           <button
-            onClick={() => setActiveTab('login')}
+            onClick={() => { setActiveTab('login'); setAuthErrorMessage(null); }}
             className={`flex-1 py-2.5 text-center text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
               activeTab === 'login'
                 ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
@@ -194,7 +252,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             Sign In with Credentials
           </button>
           <button
-            onClick={() => setActiveTab('signup')}
+            onClick={() => { setActiveTab('signup'); setAuthErrorMessage(null); }}
             className={`flex-1 py-2.5 text-center text-xs sm:text-sm font-bold rounded-lg transition-all cursor-pointer ${
               activeTab === 'signup'
                 ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
@@ -220,7 +278,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="text"
                   required
                   value={loginIdentifier}
-                  onChange={e => setLoginIdentifier(e.target.value)}
+                  onChange={e => { setLoginIdentifier(e.target.value); setAuthErrorMessage(null); }}
                   placeholder="e.g. Vijay or Vijay@gmail.com"
                   className="w-full py-2.5 sm:py-3 pr-3 text-xs sm:text-sm bg-transparent border-0 focus:outline-none font-medium text-slate-900 placeholder:text-slate-400"
                 />
@@ -239,7 +297,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={loginPassword}
-                  onChange={e => setLoginPassword(e.target.value)}
+                  onChange={e => { setLoginPassword(e.target.value); setAuthErrorMessage(null); }}
                   placeholder="••••••••••••"
                   className="w-full py-2.5 sm:py-3 pr-2 text-xs sm:text-sm bg-transparent border-0 focus:outline-none font-medium text-slate-900 placeholder:text-slate-400"
                 />
@@ -252,6 +310,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {authErrorMessage && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold animate-fadeIn mt-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{authErrorMessage}</span>
+              </div>
+            )}
 
             <div className="pt-3">
               <Button
@@ -272,7 +337,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 Don't have an account yet?{' '}
                 <button
                   type="button"
-                  onClick={() => setActiveTab('signup')}
+                  onClick={() => { setActiveTab('signup'); setAuthErrorMessage(null); }}
                   className="text-brand-600 font-bold hover:underline cursor-pointer"
                 >
                   Create one now

@@ -2,6 +2,8 @@ export type UserRole = 'student' | 'industry' | 'faculty' | 'admin';
 
 export type ProficiencyTier = 'beginner' | 'developing' | 'proficient' | 'advanced';
 
+export type SkillStatus = 'excellent' | 'strong' | 'developing' | 'gap' | 'critical_gap' | 'unassessed';
+
 export interface User {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ export interface SkillScore {
   score: number; // 0-100
   verified: boolean;
   lastAssessed?: string;
+  status?: SkillStatus;
 }
 
 export interface AssessmentQuestion {
@@ -78,11 +81,30 @@ export interface RequiredSkill {
   weight?: number;
 }
 
+export interface RoadmapMilestone {
+  id: string;
+  title: string;
+  description: string;
+  skills: string[];
+  status: 'completed' | 'in-progress' | 'upcoming';
+  level: 'Foundational' | 'Intermediate' | 'Advanced' | 'Capstone';
+  topics?: string[];
+  isAdaptiveSkipped?: boolean;
+}
+
+export interface RoadmapPhase {
+  phaseNumber: number;
+  phaseTitle: string;
+  phaseDescription: string;
+  status: 'completed' | 'in-progress' | 'upcoming';
+  milestones: RoadmapMilestone[];
+}
+
 export interface CareerPath {
   id: string;
   title: string;
   description: string;
-  avgReadiness: number; // calculated against current student
+  avgReadiness: number; // calculated dynamically against student skills
   demandLevel: 'High' | 'Very High' | 'Critical Demand';
   avgSalary: string;
   requiredSkills: RequiredSkill[];
@@ -139,6 +161,24 @@ export interface Course {
   matchReason?: string;
 }
 
+export interface BridgeCourse {
+  id: string;
+  skillName: string;
+  title: string;
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  estimatedDuration: string;
+  description: string;
+  gapSize: number; // e.g. 30% gap
+  userScore: number;
+  requiredScore: number;
+  learningObjectives: string[];
+  topics: string[];
+  practiceTasks: string[];
+  miniProject: string;
+  status: 'not-started' | 'in-progress' | 'completed';
+  completionScore?: number;
+}
+
 export type ApplicationStatus = 'Applied' | 'Under Review' | 'Shortlisted' | 'Interview' | 'Selected' | 'Rejected';
 
 export interface Application {
@@ -180,6 +220,16 @@ export interface StudentCertification {
   verified: boolean;
 }
 
+export interface AssessmentRecord {
+  id: string;
+  assessmentId: string;
+  title: string;
+  completedAt: string;
+  score: number;
+  passed: boolean;
+  skillScores: Record<string, number>;
+}
+
 export interface StudentProfile {
   user: User;
   rollNo: string;
@@ -190,6 +240,8 @@ export interface StudentProfile {
   careerReadiness: number;
   careerReadinessDelta: number;
   targetCareerId: string;
+  hasTakenAssessment?: boolean;
+  assessmentHistory?: AssessmentRecord[];
   skills: SkillScore[];
   projects: StudentProject[];
   certifications: StudentCertification[];
@@ -210,6 +262,7 @@ export interface StudentProfile {
 
 export interface NotificationItem {
   id: string;
+  userId?: string;
   title: string;
   message: string;
   time: string;
@@ -221,8 +274,10 @@ export interface SkillGapItem {
   skillName: string;
   requiredScore: number;
   studentScore: number;
-  status: 'strong' | 'moderate' | 'gap';
-  gapDelta: number;
+  status: SkillStatus;
+  statusLabel: string;
+  gapDelta: number; // studentScore - requiredScore
+  gapPercentage: number; // positive gap deficit
 }
 
 export interface CorporatePartner {

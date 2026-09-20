@@ -21,7 +21,9 @@ import {
   INITIAL_PARTNERS,
   CAREER_PATHS
 } from '../data/mockData';
-import { calculateOpportunityMatch, calculateSkillGaps, findMatchingSkill } from '../utils/skillMatcher';
+import { COURSE_ASSESSMENTS } from '../data/courseAssessments';
+import { calculateCareerReadiness, calculateOpportunityMatch, calculateSkillGaps, findMatchingSkill } from '../utils/skillMatcher';
+import { formatSalary } from '../utils/salaryUtils';
 import { SupabaseService } from '../services/supabaseService';
 
 export interface ToastNotification {
@@ -80,7 +82,7 @@ interface AppContextType {
   supabaseStatusText: string;
   setSearchTerm: (term: string) => void;
   loginAs: (role: UserRole) => void;
-  loginWithCredentials: (identifier: string, password?: string) => Promise<boolean>;
+  loginWithCredentials: (identifier: string, password?: string) => Promise<{ success: boolean; message: string }>;
   registerWithCredentials: (userData: {
     name: string;
     username: string;
@@ -95,7 +97,7 @@ interface AppContextType {
     cgpa?: string;
     location?: string;
     specialization?: string;
-  }) => Promise<boolean>;
+  }) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   navigateTo: (
     tab: string,
@@ -113,6 +115,13 @@ interface AppContextType {
   ) => Promise<void>;
   markNotificationAsRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
+  hasTakenAssessment: boolean;
+  reassessSkill: (skillName: string, newScore: number) => void;
+  completeBridgeCourse: (skillName: string) => void;
+  setDemoProfileState: (preset: 'low' | 'medium' | 'high' | 'unassessed') => void;
+  theme: 'light' | 'dark';
+  toggleTheme: () => void;
+  setTheme: (theme: 'light' | 'dark') => void;
   showToast: (type: 'success' | 'info' | 'warning' | 'error', message: string, title?: string) => void;
   removeToast: (id: string) => void;
   resetToDefaults: () => void;
@@ -140,7 +149,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [selectedCareerId, setSelectedCareerId] = useState<string | null>('cp-fullstack');
   const [activeAssessmentId, setActiveAssessmentId] = useState<string | null>('asm-react');
-  const [lastAssessmentResult, setLastAssessmentResult] = useState<AssessmentResultData | null>(null);
+  const [lastAssessmentResult, setLastAssessmentResult] = useState<AssessmentResultData | null>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_last_assessment_result`);
+    if (!saved) return null;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return null;
+    }
+  });
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isSupabaseConnected, setIsSupabaseConnected] = useState<boolean>(true);
   const [supabaseStatusText, setSupabaseStatusText] = useState<string>('Supabase Cloud Syncing...');
@@ -172,6 +189,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [toasts, setToasts] = useState<ToastNotification[]>([]);
 
+  useEffect(() => {
+    if (lastAssessmentResult) {
+      localStorage.setItem(`${STORAGE_KEY}_last_assessment_result`, JSON.stringify(lastAssessmentResult));
+    }
+  }, [lastAssessmentResult]);
+
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('skillbridge_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  const setTheme = (newTheme: 'light' | 'dark') => {
+    setThemeState(newTheme);
+    localStorage.setItem('skillbridge_theme', newTheme);
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
   // Initialize Supabase Connection & Hydrate Live Data on Mount
   useEffect(() => {
     async function initSupabase() {
@@ -197,22 +248,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setPartners(livePartners);
         }
 
-        // Fetch live skills from Supabase
-        const liveSkills = await SupabaseService.fetchSkills();
-        if (liveSkills && liveSkills.length > 0) {
-          setStudentProfile(prev => ({
-            ...prev,
-            skills: liveSkills
-          }));
-        }
-
-        // Fetch live profile details if user logged in
+        // Check live assessment status & skills for authenticated user
         const currentUserId = currentUser?.id || 'usr-std-01';
+        const asrStatus = await SupabaseService.fetchUserAssessmentStatus(currentUserId);
         const liveProfile = await SupabaseService.fetchProfile(currentUserId);
-        if (liveProfile) {
+        const userSkills = await SupabaseService.fetchUserSkills(currentUserId);
+        const isAssessed = asrStatus.hasTakenAssessment || Boolean(userSkills && userSkills.some(s => s.verified));
+
+        if (isAssessed) {
+          setStudentProfile(prev => {
+            const targetId = liveProfile?.targetCareerId || prev.targetCareerId || 'cp-fullstack';
+            const targetCareer = CAREER_PATHS.find(c => c.id === targetId) || CAREER_PATHS[0];
+            const skillsToUse = userSkills && userSkills.length > 0 ? userSkills : prev.skills;
+            const dynamicReadiness = calculateCareerReadiness(targetCareer, skillsToUse, true);
+
+            return {
+              ...prev,
+              ...(liveProfile || {}),
+              hasTakenAssessment: true,
+              careerReadiness: dynamicReadiness,
+              skills: skillsToUse,
+              assessmentHistory: asrStatus.results || prev.assessmentHistory || []
+            };
+          });
+        } else if (liveProfile) {
           setStudentProfile(prev => ({
             ...prev,
-            ...liveProfile
+            ...liveProfile,
+            hasTakenAssessment: false,
+            careerReadiness: 0,
+            skills: userSkills && userSkills.length > 0 ? userSkills : []
           }));
         }
 
@@ -265,7 +330,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('success', `Signed in as ${user.name} (${role.toUpperCase()})`, 'Authentication Successful');
   };
 
-  const loginWithCredentials = async (identifier: string, password?: string): Promise<boolean> => {
+  const loginWithCredentials = async (identifier: string, password?: string): Promise<{ success: boolean; message: string }> => {
     const res = await SupabaseService.loginUser(identifier, password);
     if (res.success && res.user && res.role) {
       setCurrentUser(res.user);
@@ -275,34 +340,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(`${STORAGE_KEY}_auth_session`, JSON.stringify({ user: res.user, role: res.role }));
 
       if (res.role === 'student') {
+        const asrStatus = await SupabaseService.fetchUserAssessmentStatus(res.user.id);
         const liveProfile = await SupabaseService.fetchProfile(res.user.id);
-        if (liveProfile) {
-          setStudentProfile(prev => ({
+        const userSkills = await SupabaseService.fetchUserSkills(res.user.id);
+
+        const isAssessed = asrStatus.hasTakenAssessment || Boolean(userSkills && userSkills.some(s => s.verified));
+
+        setStudentProfile(prev => {
+          const targetId = liveProfile?.targetCareerId || prev.targetCareerId || 'cp-fullstack';
+          const targetCareer = CAREER_PATHS.find(c => c.id === targetId) || CAREER_PATHS[0];
+          const skillsToUse = userSkills && userSkills.length > 0 ? userSkills : (isAssessed ? prev.skills : []);
+          const dynamicReadiness = isAssessed ? calculateCareerReadiness(targetCareer, skillsToUse, true) : 0;
+
+          return {
             ...prev,
             user: res.user!,
-            ...liveProfile
-          }));
-        } else {
-          setStudentProfile(prev => ({
-            ...prev,
-            user: res.user!
-          }));
-        }
-
-        const liveSkills = await SupabaseService.fetchSkills();
-        if (liveSkills && liveSkills.length > 0) {
-          setStudentProfile(prev => ({
-            ...prev,
-            skills: liveSkills
-          }));
-        }
+            ...(liveProfile || {}),
+            hasTakenAssessment: isAssessed,
+            careerReadiness: dynamicReadiness,
+            careerReadinessDelta: isAssessed ? (liveProfile?.careerReadinessDelta || 0) : 0,
+            skills: skillsToUse,
+            assessmentHistory: asrStatus.results || []
+          };
+        });
       }
 
       showToast('success', res.message, 'Authenticated with Supabase');
-      return true;
+      return { success: true, message: res.message };
     } else {
       showToast('error', res.message, 'Authentication Failed');
-      return false;
+      return { success: false, message: res.message };
     }
   };
 
@@ -320,7 +387,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     cgpa?: string;
     location?: string;
     specialization?: string;
-  }): Promise<boolean> => {
+  }): Promise<{ success: boolean; message: string }> => {
     const res = await SupabaseService.registerUser(userData);
     if (res.success && res.user) {
       setCurrentUser(res.user);
@@ -336,21 +403,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           rollNo: userData.rollNo || undefined,
           department: userData.department || undefined,
           batch: userData.batch || undefined,
-          cgpa: userData.cgpa || undefined
+          cgpa: userData.cgpa || undefined,
+          hasTakenAssessment: false,
+          careerReadiness: 0,
+          careerReadinessDelta: 0,
+          skills: [],
+          assessmentHistory: []
         }));
+        setLastAssessmentResult(null);
+        localStorage.removeItem(`${STORAGE_KEY}_last_assessment_result`);
       }
 
       showToast('success', `Welcome to SkillBridge, ${res.user.name}! Your account is stored in Supabase.`, 'Account Created');
-      return true;
+      return { success: true, message: res.message };
     } else {
       showToast('error', res.message, 'Registration Failed');
-      return false;
+      return { success: false, message: res.message };
     }
   };
 
   const logout = () => {
     localStorage.removeItem(`${STORAGE_KEY}_auth_session`);
+    localStorage.removeItem(`${STORAGE_KEY}_last_assessment_result`);
+    localStorage.removeItem(`${STORAGE_KEY}_student`);
     setIsLoggedIn(false);
+    setLastAssessmentResult(null);
+    setStudentProfile(INITIAL_STUDENT_PROFILE);
     setActiveTab('landing');
     showToast('info', 'You have been logged out of SkillBridge.', 'Logged Out');
   };
@@ -424,7 +502,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     answers: Record<string, number>,
     timeSpentSeconds: number
   ) => {
-    const assessment = MOCK_ASSESSMENTS.find(a => a.id === assessmentId) || MOCK_ASSESSMENTS[0];
+    const assessment =
+      Object.values(COURSE_ASSESSMENTS).find(a => a.id === assessmentId || a.courseCategoryId === assessmentId) ||
+      COURSE_ASSESSMENTS[assessmentId] ||
+      MOCK_ASSESSMENTS.find(a => a.id === assessmentId) ||
+      Object.values(COURSE_ASSESSMENTS)[0];
+
     let correctCount = 0;
 
     const questionResults = assessment.questions.map((q) => {
@@ -444,7 +527,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const skillCounts: Record<string, { total: number; correct: number }> = {};
     assessment.questions.forEach((q) => {
       const isCorr = answers[q.id] === q.correctOptionIndex;
-      const sName = q.skill || 'General Skill';
+      const sName = q.skill || assessment.skillCategory || 'Domain Skill';
       if (!skillCounts[sName]) {
         skillCounts[sName] = { total: 0, correct: 0 };
       }
@@ -462,12 +545,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    const calculatedScore = Math.round((correctCount / assessment.questions.length) * 100);
-    const skillName = assessment.questions[0]?.skill || 'React.js';
+    const totalQuestions = assessment.questions.length || 1;
+    const calculatedScore = Math.round((correctCount / totalQuestions) * 100);
+    const skillName = assessment.questions[0]?.skill || assessment.skillCategory || 'Domain Skill';
 
     // Find old score for primary skill
     const existingSkill = findMatchingSkill(skillName, studentProfile.skills);
-    const previousScore = existingSkill ? existingSkill.score : 50;
+    const previousScore = existingSkill ? existingSkill.score : 0;
 
     // Update student skills in profile for all skills tested in breakdown
     let updatedSkillList = [...studentProfile.skills];
@@ -500,10 +584,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const uniqueSkillsMap = new Map<string, typeof studentProfile.skills[0]>();
     updatedSkillList.forEach(s => {
       const key = s.name.trim().toLowerCase();
-      const existing = uniqueSkillsMap.get(key);
-      if (!existing || s.score > existing.score) {
-        uniqueSkillsMap.set(key, s);
-      }
+      uniqueSkillsMap.set(key, s);
     });
     const updatedSkills = Array.from(uniqueSkillsMap.values());
 
@@ -519,36 +600,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newTargetCareerId = courseToCareerMap[assessment.courseCategoryId] || studentProfile.targetCareerId || 'cp-fullstack';
     const targetCareer = CAREER_PATHS.find(c => c.id === newTargetCareerId) || CAREER_PATHS[0];
 
-    // Compute dynamic readiness score from skill gaps
-    const gapAnalysis = calculateSkillGaps(targetCareer.requiredSkills, updatedSkills);
-    const newReadiness = gapAnalysis.overallMatchScore;
-    const oldReadiness = studentProfile.careerReadiness;
-    const delta = newReadiness - oldReadiness;
-
-    const updatedProfile: StudentProfile = {
-      ...studentProfile,
-      targetCareerId: newTargetCareerId,
-      careerReadiness: newReadiness,
-      careerReadinessDelta: delta !== 0 ? delta : 5,
-      skills: updatedSkills
-    };
+    // Calculate delta against old readiness
+    const oldReadiness = studentProfile.careerReadiness || 0;
+    const delta = calculatedScore - oldReadiness;
 
     const passingScore = assessment.passingScore || 60;
     const isPassed = calculatedScore >= passingScore;
     const incorrectAnswersCount = assessment.questions.length - correctCount;
     const skillLevel = calculatedScore >= 80 ? 'Advanced' : calculatedScore >= 60 ? 'Intermediate' : 'Developing';
 
-    // Persist to Supabase
-    SupabaseService.saveProfile(updatedProfile);
-    SupabaseService.recordAssessmentResult(
+    const newAssessmentRecord = {
+      id: `rec-${Date.now()}`,
       assessmentId,
-      studentProfile.user.id,
-      skillName,
-      calculatedScore,
-      isPassed,
-      timeSpentSeconds,
-      questionResults
-    );
+      courseCategoryId: assessment.courseCategoryId,
+      title: assessment.title,
+      completedAt: 'Just now',
+      score: calculatedScore,
+      passed: isPassed,
+      skillScores: skillBreakdown.reduce((acc, sb) => ({ ...acc, [sb.skill]: sb.percentage }), {})
+    };
+
+    const updatedProfile: StudentProfile = {
+      ...studentProfile,
+      targetCareerId: newTargetCareerId,
+      careerReadiness: calculatedScore,
+      careerReadinessDelta: delta,
+      hasTakenAssessment: true,
+      assessmentHistory: [newAssessmentRecord, ...(studentProfile.assessmentHistory || [])],
+      skills: updatedSkills
+    };
+
+    setSelectedCareerId(newTargetCareerId);
 
     const resultData: AssessmentResultData = {
       assessment,
@@ -568,11 +650,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       questionResults
     };
 
+    // Persist to state and storage
+    setStudentProfile(updatedProfile);
     setLastAssessmentResult(resultData);
+    localStorage.setItem(`${STORAGE_KEY}_student`, JSON.stringify(updatedProfile));
+    localStorage.setItem(`${STORAGE_KEY}_last_assessment_result`, JSON.stringify(resultData));
+
+    SupabaseService.saveProfile(updatedProfile);
+    SupabaseService.recordAssessmentResult(
+      assessmentId,
+      studentProfile.user.id,
+      skillName,
+      calculatedScore,
+      isPassed,
+      timeSpentSeconds,
+      questionResults,
+      skillBreakdown,
+      calculatedScore,
+      newTargetCareerId
+    );
 
     // Add notification
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
+      userId: studentProfile.user.id,
       title: `Assessment Completed: ${assessment.title}`,
       message: `You scored ${calculatedScore}% in ${assessment.title}. Your skill profile and readiness scores have been recalibrated!`,
       time: 'Just now',
@@ -583,6 +684,133 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast('success', `Completed ${assessment.title} with score ${calculatedScore}%!`, 'Skill Verified & Cloud Synced');
     navigateTo('skill-results');
+  };
+
+  // 12. RE-ASSESSMENT LOOP: Re-assess a specific skill to boost score & shrink gaps
+  const reassessSkill = (skillName: string, newScore: number) => {
+    let updatedSkillList = [...studentProfile.skills];
+    const matched = findMatchingSkill(skillName, updatedSkillList);
+    const oldScore = matched ? matched.score : 0;
+
+    if (matched) {
+      updatedSkillList = updatedSkillList.map(s => {
+        if (s.name.toLowerCase().trim() === matched.name.toLowerCase().trim()) {
+          return {
+            ...s,
+            score: newScore,
+            verified: true,
+            lastAssessed: 'Just now'
+          };
+        }
+        return s;
+      });
+    } else {
+      updatedSkillList.push({
+        id: `sk-${Date.now()}`,
+        name: skillName,
+        category: 'Frontend',
+        score: newScore,
+        verified: true,
+        lastAssessed: 'Just now'
+      });
+    }
+
+    const targetCareer = CAREER_PATHS.find(c => c.id === studentProfile.targetCareerId) || CAREER_PATHS[0];
+    const gapAnalysis = calculateSkillGaps(targetCareer.requiredSkills, updatedSkillList, targetCareer.title, true);
+    const newReadiness = gapAnalysis.overallMatchScore;
+    const delta = newReadiness - studentProfile.careerReadiness;
+
+    const updatedProfile: StudentProfile = {
+      ...studentProfile,
+      skills: updatedSkillList,
+      careerReadiness: newReadiness,
+      careerReadinessDelta: delta,
+      hasTakenAssessment: true
+    };
+
+    setStudentProfile(updatedProfile);
+    SupabaseService.saveProfile(updatedProfile);
+
+    const notif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      userId: studentProfile.user.id,
+      title: `Re-assessment Verified: ${skillName}`,
+      message: `Your ${skillName} score increased from ${oldScore}% to ${newScore}%. Career readiness recalibrated to ${newReadiness}%.`,
+      time: 'Just now',
+      read: false,
+      type: 'assessment'
+    };
+    setNotifications(prev => [notif, ...prev]);
+    showToast('success', `Re-assessed ${skillName}: Verified score is now ${newScore}%!`, 'Skill Recalibrated');
+  };
+
+  // 10. BRIDGE COURSES: Complete a bridge course module
+  const completeBridgeCourse = (skillName: string) => {
+    const existing = findMatchingSkill(skillName, studentProfile.skills);
+    const currentScore = existing ? existing.score : 40;
+    // Boost score by +25% up to 88%
+    const boostedScore = Math.min(92, Math.max(78, currentScore + 25));
+    reassessSkill(skillName, boostedScore);
+    showToast('success', `Congratulations! You completed the ${skillName} Bridge Course. Skill score updated to ${boostedScore}%.`, 'Bridge Course Completed');
+  };
+
+  // Preset demo states for testing Low, Medium, High & Unassessed profiles
+  const setDemoProfileState = (preset: 'low' | 'medium' | 'high' | 'unassessed') => {
+    let presetSkills: SkillScore[] = [];
+    let hasAssessed = true;
+
+    if (preset === 'low') {
+      presetSkills = [
+        { id: 'sk-js', name: 'JavaScript', category: 'Frontend', score: 42, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-html-css', name: 'HTML5 & Modern CSS', category: 'Frontend', score: 62, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-react', name: 'React.js', category: 'Frontend', score: 35, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-sql', name: 'SQL & Database Design', category: 'Database', score: 30, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-git', name: 'Git & Version Control', category: 'DevOps & Cloud', score: 38, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-node', name: 'Node.js & Express', category: 'Backend', score: 25, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-ts', name: 'TypeScript', category: 'Frontend', score: 30, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-dsa', name: 'Data Structures & Algorithms', category: 'Core CS', score: 45, verified: true, lastAssessed: 'Today' }
+      ];
+    } else if (preset === 'medium') {
+      presetSkills = [
+        { id: 'sk-js', name: 'JavaScript', category: 'Frontend', score: 75, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-html-css', name: 'HTML5 & Modern CSS', category: 'Frontend', score: 85, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-react', name: 'React.js', category: 'Frontend', score: 65, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-sql', name: 'SQL & Database Design', category: 'Database', score: 60, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-git', name: 'Git & Version Control', category: 'DevOps & Cloud', score: 65, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-node', name: 'Node.js & Express', category: 'Backend', score: 58, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-ts', name: 'TypeScript', category: 'Frontend', score: 60, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-dsa', name: 'Data Structures & Algorithms', category: 'Core CS', score: 70, verified: true, lastAssessed: 'Today' }
+      ];
+    } else if (preset === 'high') {
+      presetSkills = [
+        { id: 'sk-js', name: 'JavaScript', category: 'Frontend', score: 92, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-html-css', name: 'HTML5 & Modern CSS', category: 'Frontend', score: 95, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-react', name: 'React.js', category: 'Frontend', score: 88, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-sql', name: 'SQL & Database Design', category: 'Database', score: 85, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-git', name: 'Git & Version Control', category: 'DevOps & Cloud', score: 86, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-node', name: 'Node.js & Express', category: 'Backend', score: 84, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-ts', name: 'TypeScript', category: 'Frontend', score: 88, verified: true, lastAssessed: 'Today' },
+        { id: 'sk-dsa', name: 'Data Structures & Algorithms', category: 'Core CS', score: 90, verified: true, lastAssessed: 'Today' }
+      ];
+    } else {
+      presetSkills = [];
+      hasAssessed = false;
+    }
+
+    const targetCareer = CAREER_PATHS.find(c => c.id === studentProfile.targetCareerId) || CAREER_PATHS[0];
+    const gapAnalysis = calculateSkillGaps(targetCareer.requiredSkills, presetSkills, targetCareer.title, hasAssessed);
+
+    const updatedProfile: StudentProfile = {
+      ...studentProfile,
+      hasTakenAssessment: hasAssessed,
+      careerReadiness: gapAnalysis.overallMatchScore,
+      careerReadinessDelta: 0,
+      skills: presetSkills
+    };
+
+    setStudentProfile(updatedProfile);
+    SupabaseService.saveProfile(updatedProfile);
+    showToast('info', `Switched profile state to: ${preset.toUpperCase()}`, 'Profile State Updated');
   };
 
   const applyToOpportunity = (opportunityId: string, notes?: string): boolean => {
@@ -596,7 +824,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return false;
     }
 
-    const match = calculateOpportunityMatch(opp, studentProfile.skills);
+    const match = calculateOpportunityMatch(opp, studentProfile.skills, studentProfile.hasTakenAssessment);
 
     const newApplication: Application = {
       id: `app-${Date.now()}`,
@@ -606,11 +834,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       companyName: opp.company.name,
       companyInitials: opp.company.initials,
       companyLocation: opp.location,
-      stipendSalary: opp.stipendSalary,
+      stipendSalary: formatSalary(opp.stipendSalary),
       studentId: currentUser.id,
       studentName: currentUser.name,
       studentEmail: currentUser.email,
-      studentCollege: studentProfile.education[0]?.institution || 'NIT',
+      studentCollege: studentProfile.education[0]?.institution || currentUser.organization || 'NIT',
       appliedDate: 'Today',
       status: 'Applied',
       matchScore: match.matchPercentage,
@@ -632,6 +860,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Add notification
     const newNotif: NotificationItem = {
       id: `notif-${Date.now()}`,
+      userId: currentUser.id,
       title: 'Application Submitted!',
       message: `Successfully applied to ${opp.title} at ${opp.company.name}. Record saved to Supabase cloud.`,
       time: 'Just now',
@@ -656,6 +885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (app) {
       const notif: NotificationItem = {
         id: `notif-${Date.now()}`,
+        userId: app.studentId,
         title: `Status Updated: ${app.opportunityTitle}`,
         message: `Your application status at ${app.companyName} is now "${newStatus}".`,
         time: 'Just now',
@@ -683,6 +913,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
+      userId: currentUser.id,
       title: 'Opportunity Published',
       message: `New posting "${newOpp.title}" is now active and stored in Supabase.`,
       time: 'Just now',
@@ -699,7 +930,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const markAllNotificationsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    setNotifications(prev =>
+      prev.map(n => (!n.userId || n.userId === currentUser.id ? { ...n, read: true } : n))
+    );
     showToast('info', 'All notifications marked as read.');
   };
 
@@ -718,6 +951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const notif: NotificationItem = {
       id: `notif-${Date.now()}`,
+      userId: currentUser.id,
       title: 'Industry MoU Registered',
       message: `Partner "${newPartner.name}" has been registered and synced with Supabase.`,
       time: 'Just now',
@@ -731,10 +965,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resetToDefaults = () => {
     localStorage.removeItem(`${STORAGE_KEY}_student`);
+    localStorage.removeItem(`${STORAGE_KEY}_last_assessment_result`);
     localStorage.removeItem(`${STORAGE_KEY}_opps`);
     localStorage.removeItem(`${STORAGE_KEY}_apps`);
     localStorage.removeItem(`${STORAGE_KEY}_partners`);
     localStorage.removeItem(`${STORAGE_KEY}_notifs`);
+    setLastAssessmentResult(null);
     setStudentProfile(INITIAL_STUDENT_PROFILE);
     setOpportunities(MOCK_OPPORTUNITIES);
     setApplications(INITIAL_APPLICATIONS);
@@ -778,6 +1014,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateFullProfileAndPreferences,
         markNotificationAsRead,
         markAllNotificationsRead,
+        hasTakenAssessment: Boolean(studentProfile.hasTakenAssessment && studentProfile.skills.length > 0),
+        reassessSkill,
+        completeBridgeCourse,
+        setDemoProfileState,
+        theme,
+        toggleTheme,
+        setTheme,
         showToast,
         removeToast,
         resetToDefaults

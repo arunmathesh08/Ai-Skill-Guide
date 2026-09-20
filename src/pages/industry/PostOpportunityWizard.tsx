@@ -18,6 +18,7 @@ import { Card, CardHeader } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Opportunity } from '../../types';
+import { formatSalary } from '../../utils/salaryUtils';
 
 export const PostOpportunityWizard: React.FC = () => {
   const { currentUser, postOpportunity, navigateTo } = useApp();
@@ -72,7 +73,7 @@ export const PostOpportunityWizard: React.FC = () => {
       isRemote,
       location,
       duration,
-      stipendSalary,
+      stipendSalary: formatSalary(stipendSalary),
       deadline,
       eligibility,
       description,
@@ -399,7 +400,7 @@ export const PostOpportunityWizard: React.FC = () => {
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-600 font-medium">
-                    {currentUser.organization} • {location} • <strong className="text-emerald-700 font-mono">{stipendSalary}</strong>
+                    {currentUser.organization} • {location} • <strong className="text-emerald-700 font-mono">{formatSalary(stipendSalary)}</strong>
                   </p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-brand-600 text-white font-bold text-xs flex items-center justify-center shrink-0">

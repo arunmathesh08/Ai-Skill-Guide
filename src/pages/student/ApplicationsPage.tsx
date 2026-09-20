@@ -17,12 +17,16 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Tabs } from '../../components/common/Tabs';
 import { ApplicationStatus } from '../../types';
+import { formatSalary } from '../../utils/salaryUtils';
 
 export const ApplicationsPage: React.FC = () => {
-  const { applications, navigateTo } = useApp();
+  const { applications, currentUser, navigateTo } = useApp();
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  const filteredApplications = applications.filter(app => {
+  // Load only applications belonging to the logged-in user account
+  const userApplications = applications.filter(app => app.studentId === currentUser.id);
+
+  const filteredApplications = userApplications.filter(app => {
     if (statusFilter === 'all') return true;
     if (statusFilter === 'active') return app.status !== 'Rejected' && app.status !== 'Selected';
     return app.status.toLowerCase() === statusFilter.toLowerCase();
@@ -59,11 +63,11 @@ export const ApplicationsPage: React.FC = () => {
   };
 
   const tabs = [
-    { id: 'all', label: 'All Applications', count: applications.length },
-    { id: 'active', label: 'In Progress', count: applications.filter(a => a.status !== 'Rejected' && a.status !== 'Selected').length },
-    { id: 'shortlisted', label: 'Shortlisted', count: applications.filter(a => a.status === 'Shortlisted').length },
-    { id: 'interview', label: 'Interview', count: applications.filter(a => a.status === 'Interview').length },
-    { id: 'selected', label: 'Offers', count: applications.filter(a => a.status === 'Selected').length }
+    { id: 'all', label: 'All Applications', count: userApplications.length },
+    { id: 'active', label: 'In Progress', count: userApplications.filter(a => a.status !== 'Rejected' && a.status !== 'Selected').length },
+    { id: 'shortlisted', label: 'Shortlisted', count: userApplications.filter(a => a.status === 'Shortlisted').length },
+    { id: 'interview', label: 'Interview', count: userApplications.filter(a => a.status === 'Interview').length },
+    { id: 'selected', label: 'Offers', count: userApplications.filter(a => a.status === 'Selected').length }
   ];
 
   return (
@@ -102,7 +106,21 @@ export const ApplicationsPage: React.FC = () => {
 
       {/* Applications List */}
       <div className="space-y-4">
-        {filteredApplications.length === 0 ? (
+        {userApplications.length === 0 ? (
+          <Card className="text-center py-12">
+            <Send className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <h4 className="font-bold text-slate-800 text-sm">No applications yet</h4>
+            <p className="text-xs text-slate-500 mt-1">Your job applications will appear here after you apply.</p>
+            <Button
+              variant="primary"
+              size="xs"
+              className="mt-4"
+              onClick={() => navigateTo('opportunities')}
+            >
+              Browse Opportunities
+            </Button>
+          </Card>
+        ) : filteredApplications.length === 0 ? (
           <Card className="text-center py-12">
             <Send className="w-8 h-8 text-slate-300 mx-auto mb-2" />
             <h4 className="font-bold text-slate-800 text-sm">No applications found in this category</h4>
@@ -145,7 +163,7 @@ export const ApplicationsPage: React.FC = () => {
                         <span>•</span>
                         <span>{app.companyLocation}</span>
                         <span>•</span>
-                        <span className="font-mono font-semibold text-slate-800">{app.stipendSalary}</span>
+                        <span className="font-mono font-semibold text-slate-800">{formatSalary(app.stipendSalary)}</span>
                       </p>
                     </div>
                   </div>

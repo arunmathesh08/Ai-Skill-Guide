@@ -18,12 +18,15 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { MatchScoreBadge } from '../../components/common/MatchScoreBadge';
 import { calculateOpportunityMatch } from '../../utils/skillMatcher';
+import { formatSalary } from '../../utils/salaryUtils';
 
 export const OpportunitiesPage: React.FC = () => {
   const {
     opportunities,
     studentProfile,
     applications,
+    currentUser,
+    hasTakenAssessment,
     searchTerm,
     setSearchTerm,
     navigateTo
@@ -34,11 +37,14 @@ export const OpportunitiesPage: React.FC = () => {
   const [minMatchFilter, setMinMatchFilter] = useState<number>(0);
   const [sortBy, setSortBy] = useState<'match' | 'recent' | 'stipend'>('match');
 
+  // Filter applications belonging to logged-in user
+  const userApplications = applications.filter(a => a.studentId === currentUser.id);
+
   // Filter and calculate match for all opportunities
   const processedOpps = opportunities
     .map(opp => {
-      const match = calculateOpportunityMatch(opp, studentProfile.skills);
-      const isApplied = applications.some(a => a.opportunityId === opp.id);
+      const match = calculateOpportunityMatch(opp, studentProfile.skills, hasTakenAssessment);
+      const isApplied = userApplications.some(a => a.opportunityId === opp.id);
       return {
         opp,
         match,
@@ -92,7 +98,7 @@ export const OpportunitiesPage: React.FC = () => {
             size="sm"
             onClick={() => navigateTo('applications')}
           >
-            My Application Pipeline ({applications.length})
+            My Application Pipeline ({userApplications.length})
           </Button>
         </div>
       </div>
@@ -244,7 +250,7 @@ export const OpportunitiesPage: React.FC = () => {
                       </span>
                       <span>•</span>
                       <span className="font-bold font-mono text-emerald-700">
-                        {opp.stipendSalary}
+                        {formatSalary(opp.stipendSalary)}
                       </span>
                       {opp.duration && (
                         <>

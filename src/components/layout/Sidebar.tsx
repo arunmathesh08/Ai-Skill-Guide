@@ -49,10 +49,15 @@ interface NavDivision {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, setIsOpenMobile }) => {
-  const { currentRole, activeTab, navigateTo, applications, notifications } = useApp();
+  const { currentRole, currentUser, activeTab, navigateTo, applications, notifications } = useApp();
 
-  const unreadNotifsCount = notifications.filter(n => !n.read).length;
-  const activeAppsCount = applications.filter(a => a.status !== 'Rejected').length;
+  // Dynamically calculate actual applications for logged-in user
+  const userApplications = applications.filter(a => a.studentId === currentUser?.id);
+  const totalAppsCount = userApplications.length;
+
+  // Dynamically calculate actual unread notifications for logged-in user
+  const userNotifications = notifications.filter(n => n.userId === currentUser?.id);
+  const unreadNotifsCount = userNotifications.filter(n => !n.read).length;
 
   // Student Navigation Divisions
   const studentDivisions: NavDivision[] = [
@@ -83,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpenMobile, setIsOpenMobile 
       items: [
         { id: 'opportunities', label: 'Internships & Jobs', icon: <Briefcase className="w-4 h-4" /> },
         { id: 'learning', label: 'Targeted Learning', icon: <BookOpen className="w-4 h-4" /> },
-        { id: 'applications', label: 'Application Pipeline', icon: <Send className="w-4 h-4" />, badge: activeAppsCount },
+        { id: 'applications', label: 'Application Pipeline', icon: <Send className="w-4 h-4" />, badge: totalAppsCount },
         { id: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" />, badge: unreadNotifsCount }
       ]
     }

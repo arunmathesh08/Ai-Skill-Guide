@@ -263,37 +263,37 @@ export const PortfolioPage: React.FC = () => {
   return (
     <div className="space-y-6 animate-fadeIn max-w-5xl mx-auto">
       {/* Profile Header Banner */}
-      <Card className="p-6 sm:p-8 bg-white border-slate-200 shadow-md">
+      <Card className="p-6 sm:p-8 bg-white dark:bg-[#111827] border-slate-200 dark:border-slate-800 shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
           <div className="flex items-start gap-4">
-            <div className="w-20 h-20 rounded-2xl bg-slate-900 text-white font-black text-2xl flex items-center justify-center shadow-lg shrink-0">
+            <div className="w-20 h-20 rounded-2xl bg-slate-900 dark:bg-brand-600 text-white font-black text-2xl flex items-center justify-center shadow-lg shrink-0">
               {studentProfile.user.avatar || 'AS'}
             </div>
 
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {studentProfile.user.name}
                 </h1>
                 <Badge variant="success" size="sm">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600 mr-1" />
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400 mr-1" />
                   Verified Student
                 </Badge>
               </div>
 
-              <p className="text-sm font-semibold text-brand-600">
+              <p className="text-sm font-semibold text-brand-600 dark:text-brand-400">
                 {studentProfile.department} • {studentProfile.education[0]?.institution}
               </p>
 
-              <p className="text-xs text-slate-500 flex flex-wrap items-center gap-3 pt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-3 pt-1">
                 <span className="flex items-center gap-1">
                   <Mail className="w-3.5 h-3.5 text-slate-400" />
                   {studentProfile.user.email}
                 </span>
                 <span>•</span>
-                <span className="font-mono font-bold text-slate-800">Roll: {studentProfile.rollNo}</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">Roll: {studentProfile.rollNo}</span>
                 <span>•</span>
-                <span className="font-bold text-slate-900">CGPA: {studentProfile.cgpa}</span>
+                <span className="font-bold text-slate-900 dark:text-white">CGPA: {studentProfile.cgpa}</span>
               </p>
             </div>
           </div>
@@ -302,7 +302,8 @@ export const PortfolioPage: React.FC = () => {
             <Button
               variant="outline"
               size="sm"
-              icon={<Sparkles className="w-4 h-4 text-brand-600" />}
+              className="text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+              icon={<Sparkles className="w-4 h-4 text-brand-600 dark:text-brand-400" />}
               onClick={() => navigateTo('profile-setup')}
             >
               Academic & Feed Setup
@@ -319,73 +320,90 @@ export const PortfolioPage: React.FC = () => {
         </div>
 
         {/* Bio */}
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1.5">
             About & Career Objective
           </h3>
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed max-w-4xl">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed max-w-4xl">
             {studentProfile.bio}
           </p>
         </div>
       </Card>
 
       {/* Verified Skills Matrix */}
-      <Card>
+      <Card className="dark:bg-[#111827] dark:border-slate-800">
         <CardHeader
           title="Verified Skill Competency Matrix"
           subtitle="Proctored assessment scores verified through academic benchmarks and institutional code sandboxes"
-          icon={<Award className="w-4 h-4 text-brand-600" />}
+          icon={<Award className="w-4 h-4 text-brand-600 dark:text-brand-400" />}
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {uniqueSkills.map(skill => (
-            <div
-              key={skill.id}
-              className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 hover:border-slate-300 transition-all space-y-2"
+        {uniqueSkills.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {uniqueSkills.map(skill => (
+              <div
+                key={skill.id}
+                className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600 transition-all space-y-2"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900 dark:text-white truncate">{skill.name}</span>
+                  {skill.verified && (
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-1.5 py-0.2 rounded flex items-center gap-0.5">
+                      <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 dark:text-emerald-400" /> Verified
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <ProficiencyTag score={skill.score} size="xs" />
+                  <span className="text-[10px] text-slate-400 font-mono">{skill.lastAssessed}</span>
+                </div>
+
+                <ProgressBar value={skill.score} height="xs" variant="tier" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-6 text-center space-y-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              No verified skill competencies yet. Complete a Skill Assessment to benchmark and verify your technical skills.
+            </p>
+            <Button
+              variant="outline"
+              size="xs"
+              className="font-bold text-brand-600 dark:text-brand-400"
+              icon={<Award className="w-3.5 h-3.5" />}
+              onClick={() => navigateTo('skill-assessment')}
             >
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-900 truncate">{skill.name}</span>
-                {skill.verified && (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
-                    <CheckCircle2 className="w-2.5 h-2.5" /> Verified
-                  </span>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between text-xs">
-                <ProficiencyTag score={skill.score} size="xs" />
-                <span className="text-[10px] text-slate-400 font-mono">{skill.lastAssessed}</span>
-              </div>
-
-              <ProgressBar value={skill.score} height="xs" variant="tier" />
-            </div>
-          ))}
-        </div>
+              Take Skill Assessment
+            </Button>
+          </div>
+        )}
       </Card>
 
       {/* Technical Projects Showcase */}
-      <Card>
+      <Card className="dark:bg-[#111827] dark:border-slate-800">
         <CardHeader
           title="Featured Engineering Projects"
           subtitle="Production-grade full stack and distributed systems architecture projects"
-          icon={<Code className="w-4 h-4 text-brand-600" />}
+          icon={<Code className="w-4 h-4 text-brand-600 dark:text-brand-400" />}
         />
 
         <div className="space-y-4">
           {studentProfile.projects.map(proj => (
             <div
               key={proj.id}
-              className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/90 hover:bg-white hover:border-slate-300 transition-all space-y-2"
+              className="p-4 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/90 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all space-y-2"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <h4 className="font-bold text-slate-900 text-sm sm:text-base">{proj.title}</h4>
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">{proj.title}</h4>
                 <div className="flex items-center gap-2">
                   {proj.githubUrl && (
                     <a
                       href={proj.githubUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white px-2.5 py-1 rounded-md border border-slate-200"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-700 px-2.5 py-1 rounded-md border border-slate-200 dark:border-slate-600"
                     >
                       <GitBranch className="w-3.5 h-3.5" /> Source Code
                     </a>
@@ -395,7 +413,7 @@ export const PortfolioPage: React.FC = () => {
                       href={proj.liveUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-800 bg-brand-50 px-2.5 py-1 rounded-md border border-brand-200"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-300 hover:text-brand-800 bg-brand-50 dark:bg-brand-950/60 px-2.5 py-1 rounded-md border border-brand-200 dark:border-brand-800"
                     >
                       <ExternalLink className="w-3.5 h-3.5" /> Live Preview
                     </a>
@@ -403,13 +421,13 @@ export const PortfolioPage: React.FC = () => {
                 </div>
               </div>
 
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">{proj.description}</p>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{proj.description}</p>
 
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
                 {proj.techStack.map(tech => (
                   <span
                     key={tech}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-white text-slate-700 border border-slate-200 font-mono"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 font-mono"
                   >
                     {tech}
                   </span>
@@ -423,21 +441,21 @@ export const PortfolioPage: React.FC = () => {
       {/* Certifications & Education Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Industry Experience */}
-        <Card>
+        <Card className="dark:bg-[#111827] dark:border-slate-800">
           <CardHeader
             title="Industry Experience"
             subtitle="Internships and software development roles"
-            icon={<Briefcase className="w-4 h-4 text-brand-600" />}
+            icon={<Briefcase className="w-4 h-4 text-brand-600 dark:text-brand-400" />}
           />
           <div className="space-y-3">
             {studentProfile.experience.map(exp => (
-              <div key={exp.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs space-y-1">
+              <div key={exp.id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 text-xs space-y-1">
                 <div className="flex justify-between items-start">
-                  <h5 className="font-bold text-slate-900 text-xs">{exp.role}</h5>
-                  <span className="text-[10px] text-slate-500 font-mono">{exp.duration}</span>
+                  <h5 className="font-bold text-slate-900 dark:text-white text-xs">{exp.role}</h5>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{exp.duration}</span>
                 </div>
-                <p className="font-semibold text-brand-700 text-[11px]">{exp.organization}</p>
-                <p className="text-slate-600 leading-relaxed pt-1">{exp.description}</p>
+                <p className="font-semibold text-brand-700 dark:text-brand-400 text-[11px]">{exp.organization}</p>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed pt-1">{exp.description}</p>
               </div>
             ))}
           </div>
@@ -445,27 +463,27 @@ export const PortfolioPage: React.FC = () => {
 
         {/* Certifications & Education */}
         <div className="space-y-6">
-          <Card>
+          <Card className="dark:bg-[#111827] dark:border-slate-800">
             <CardHeader
               title="Verified Certifications"
               subtitle="Industry-recognized credentials"
-              icon={<Award className="w-4 h-4 text-brand-600" />}
+              icon={<Award className="w-4 h-4 text-brand-600 dark:text-brand-400" />}
             />
             <div className="space-y-2.5">
               {studentProfile.certifications.map(cert => (
                 <div
                   key={cert.id}
-                  className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 flex items-start justify-between gap-2 text-xs"
+                  className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700 flex items-start justify-between gap-2 text-xs"
                 >
                   <div>
-                    <h5 className="font-bold text-slate-900">{cert.title}</h5>
-                    <p className="text-[11px] text-slate-500">{cert.issuer} • {cert.date}</p>
+                    <h5 className="font-bold text-slate-900 dark:text-white">{cert.title}</h5>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">{cert.issuer} • {cert.date}</p>
                     {cert.credentialId && (
                       <span className="text-[10px] font-mono text-slate-400">ID: {cert.credentialId}</span>
                     )}
                   </div>
                   {cert.verified && (
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded shrink-0">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950 px-1.5 py-0.2 rounded shrink-0">
                       Verified
                     </span>
                   )}
@@ -474,19 +492,19 @@ export const PortfolioPage: React.FC = () => {
             </div>
           </Card>
 
-          <Card>
+          <Card className="dark:bg-[#111827] dark:border-slate-800">
             <CardHeader
               title="Academic Education"
-              icon={<GraduationCap className="w-4 h-4 text-brand-600" />}
+              icon={<GraduationCap className="w-4 h-4 text-brand-600 dark:text-brand-400" />}
             />
             <div className="space-y-2 text-xs">
               {studentProfile.education.map((edu, idx) => (
-                <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
-                  <div className="flex justify-between font-bold text-slate-900">
+                <div key={idx} className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700">
+                  <div className="flex justify-between font-bold text-slate-900 dark:text-white">
                     <span>{edu.degree}</span>
-                    <span className="font-mono text-brand-700">{edu.grade}</span>
+                    <span className="font-mono text-brand-700 dark:text-brand-400">{edu.grade}</span>
                   </div>
-                  <p className="text-[11px] text-slate-500">{edu.institution} ({edu.year})</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">{edu.institution} ({edu.year})</p>
                 </div>
               ))}
             </div>
